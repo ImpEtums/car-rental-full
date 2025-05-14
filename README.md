@@ -53,7 +53,7 @@
 
 ### 2. 后端启动 (Python Flask)
 
-1.  打开终端，进入项目根目录 `HZNU_car_rental-main`。
+1.  打开终端，进入项目根目录 `car-rental-full`。
 2.  创建并激活 Python 虚拟环境 (推荐)：
     ```bash
     python -m venv venv
