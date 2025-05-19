@@ -90,3 +90,32 @@
 
 *   后端 `app.py` 中的 `app.config['SECRET_KEY'] = 'your_secret_key'` 应该替换为一个更安全的密钥。
 *   确保后端 CORS 配置 `CORS(app, origins="http://localhost:5173", supports_credentials=True)` 中的 `origins` 与你前端运行的地址和端口一致。
+
+
+
+# YJH聊天窗需要注意的地方
+## 重要文件
+/src/components/ChatInterface.vue
+/src/components/Loginform.vue
+/src/components/MessageItem.vue
+/src/services/ChatService.js
+在整个car-rental的文件夹当中：server.js
+src/main.js和src/App.vue改过的我打好注释了
+
+## 安装依赖
+### 前端依赖
+npm install element-plus vue ws
+
+### '后端'依赖(此后端非彼后端)
+npm install express ws memcached
+
+### 启动memcached(win可能不一样)
+memcached -d
+
+## 启动后端服务器
+node server.js
+
+## 启动前端
+npm run serve
+
+上面两个启动一个之后访问就行，app.vue还没改，我怕给整个玩坏了
