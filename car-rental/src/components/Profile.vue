@@ -71,10 +71,96 @@
             <p>总金额：{{ order.total_amount }}</p>
             <p>押金：{{ order.deposit }}</p>
             <p>下单时间：{{ formatDateTime(order.order_time) }}</p>
+            <div class="order-actions">
+              <button class="view-btn" @click="viewOrder(order)">查看</button>
+              <button 
+                class="delete-btn" 
+                @click="deleteOrder(order, index)"
+                :class="{ disabled: !canDeleteOrder(order) }"
+              >
+                删除
+              </button>
+            </div>
           </div>
         </div>
       </div>
-</div>
+
+      <!-- Order View Modal -->
+      <div v-if="viewingOrder" class="modal-overlay">
+        <div class="modal-content">
+          <h2>查看订单</h2>
+          <div class="form-group">
+            <label>订单名称</label>
+            <input type="text" :value="viewingOrder.name" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label>状态</label>
+            <input type="text" :value="viewingOrder.status_description" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label>租借天数</label>
+            <input type="number" :value="viewingOrder.rental_days" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label>总金额</label>
+            <input type="number" :value="viewingOrder.total_amount" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label>押金</label>
+            <input type="number" :value="viewingOrder.deposit" class="form-input" disabled />
+          </div>
+          <div class="form-group">
+            <label>下单时间</label>
+            <div class="date-inputs">
+              <select :value="viewingOrder.year" class="date-select" disabled>
+                <option v-for="year in years" :value="year" :key="year">{{ year }}</option>
+              </select>
+              <select :value="viewingOrder.month" class="date-select" disabled>
+                <option v-for="month in months" :value="month" :key="month">{{ month }}</option>
+              </select>
+              <select :value="viewingOrder.day" class="date-select" disabled>
+                <option v-for="day in days" :value="day" :key="day">{{ day }}</option>
+              </select>
+            </div>
+          </div>
+          <button class="question-btn" @click="openFeedbackModal">对此订单有疑问</button>
+          <div class="modal-actions">
+            <button type="button" @click="closeViewModal" class="secondary-btn">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback Modal -->
+      <div v-if="isFeedbackModalOpen" class="modal-overlay">
+        <div class="modal-content">
+          <h2>订单反馈</h2>
+          <div class="form-group">
+            <label>反馈类型</label>
+            <div v-for="(option, index) in feedbackOptions" :key="index">
+              <input type="radio" :id="option" :value="option" v-model="selectedFeedbackOption" />
+              <label :for="option">{{ option }}</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>详细内容</label>
+            <textarea
+              v-model="feedbackDetail"
+              placeholder="提供疑问的具体内容"
+              class="form-input"
+            ></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" @click="cancelFeedback" class="secondary-btn">取消</button>
+            <button type="button" @click="submitFeedback" class="primary-btn">提交</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Notification -->
+      <div v-if="showSuccessNotification" class="notification success">
+        <p>{{ successMessage }}</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -186,12 +272,63 @@ export default {
           name: '订单 004',
           status_description: '已取消',
         },
+        {
+          order_id: 5,
+          user_id: 101,
+          car_id: 206,
+          pickup_store_id: 301,
+          return_store_id: 302,
+          order_time: '2023-12-05T10:00:00',
+          start_time: '2023-12-10T10:00:00',
+          end_time: '2023-12-15T10:00:00',
+          actual_start_time: '2023-12-10T10:00:00',
+          actual_end_time: '2023-12-15T10:00:00',
+          rental_days: 5,
+          total_amount: 1500.00,
+          deposit: 300.00,
+          coupon_id: null,
+          discount_amount: 0.00,
+          create_time: '2023-12-05T09:00:00',
+          update_time: '2023-12-15T16:30:00',
+          status: 3,
+          image: new URL(`../assets/images/c4.png`, import.meta.url).href,
+          name: '订单 005',
+          status_description: '已完成',
+        },
       ],
       loading: false,
+      viewingOrder: null,
+      isFeedbackModalOpen: false,
+      feedbackOptions: [
+        '金额异常',
+        '时间错误',
+        '地点偏差',
+        '车型不符',
+        '车辆状态问题',
+        '车辆证件不全',
+        '条款模糊或误导',
+        '权益限制未明示',
+        '服务遗漏或延迟',
+        '保险纠纷',
+      ],
+      selectedFeedbackOption: '',
+      feedbackDetail: '',
+      years: Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i),
+      months: Array.from({ length: 12 }, (_, i) => i + 1),
+      days: Array.from({ length: 31 }, (_, i) => i + 1),
+      showSuccessNotification: false,
+      successMessage: '',
     };
   },
   created() {
     this.fetchUserInfo();
+    // Initialize date dropdowns for each order
+    this.orders.forEach((order) => {
+      const date = new Date(order.order_time);
+      order.year = date.getFullYear();
+      order.month = date.getMonth() + 1;
+      order.day = date.getDate();
+    });
   },
   methods: {
     formatDateTime(dateStr) {
@@ -203,7 +340,7 @@ export default {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit'
+        second: '2-digit',
       });
     },
     getStatusClass(status) {
@@ -214,6 +351,8 @@ export default {
           return 'status-waiting';
         case '已取消':
           return 'status-cancelled';
+        case '已完成':
+          return 'status-completed';
         default:
           return '';
       }
@@ -221,7 +360,7 @@ export default {
     async fetchUserInfo() {
       try {
         const response = await axiosInstance.get('/api/get_user_info', {
-          withCredentials: true
+          withCredentials: true,
         });
 
         if (response.data.status === 'success') {
@@ -241,7 +380,7 @@ export default {
           email: this.user.email,
           phone: this.user.phone,
         }, {
-          withCredentials: true
+          withCredentials: true,
         });
 
         if (response.data.status === 'success') {
@@ -257,7 +396,7 @@ export default {
     async logout() {
       try {
         const response = await axiosInstance.post('/api/logout', {}, {
-          withCredentials: true
+          withCredentials: true,
         });
 
         if (response.data.status === 'success') {
@@ -269,6 +408,76 @@ export default {
         console.error('退出登录失败:', error);
         alert('退出失败');
       }
+    },
+    viewOrder(order) {
+      this.viewingOrder = { ...order };
+    },
+    closeViewModal() {
+      this.viewingOrder = null;
+    },
+    openFeedbackModal() {
+      this.isFeedbackModalOpen = true;
+    },
+    closeFeedbackModal() {
+      this.isFeedbackModalOpen = false;
+    },
+    deleteOrder(order, index) {
+      if (!this.canDeleteOrder(order)) {
+        alert(`该订单当前尚未结束，不可以删除。`);
+        return;
+      }
+      
+      if (confirm('确定要删除此订单吗？')) {
+        // In a real app, you would call an API here
+        this.orders.splice(index, 1);
+      }
+    },
+    submitFeedback() {
+      if (!this.selectedFeedbackOption || !this.feedbackDetail) {
+        alert('请选择反馈类型并填写详细内容');
+        return;
+      }
+      
+      if (confirm('确认提交反馈吗？')) {
+        // 这里可以添加提交反馈到后端的逻辑
+        console.log('反馈已提交：', {
+          selectedFeedbackOption: this.selectedFeedbackOption,
+          feedbackDetail: this.feedbackDetail,
+        });
+        
+        // 显示成功提示
+        this.successMessage = '提交成功，后续有结果将联系您解决';
+        this.showSuccessNotification = true;
+        
+        // 3秒后隐藏提示
+        setTimeout(() => {
+          this.showSuccessNotification = false;
+        }, 3000);
+        
+        this.isFeedbackModalOpen = false;
+        this.selectedFeedbackOption = '';
+        this.feedbackDetail = '';
+      }
+    },
+    cancelFeedback() {
+      if (this.selectedFeedbackOption || this.feedbackDetail) {
+        if (confirm('是否保存此次提交内容？')) {
+          // 这里可以添加保存反馈内容的逻辑
+          console.log('反馈内容已保存：', {
+            selectedFeedbackOption: this.selectedFeedbackOption,
+            feedbackDetail: this.feedbackDetail,
+          });
+        }
+      }
+      this.isFeedbackModalOpen = false;
+      this.selectedFeedbackOption = '';
+      this.feedbackDetail = '';
+    },
+    getDaysInMonth(year, month) {
+      return new Date(year, month, 0).getDate();
+    },
+    canDeleteOrder(order) {
+      return order.status_description === '已完成' || order.status_description === '已取消';
     },
   },
 };
@@ -296,7 +505,7 @@ export default {
   max-width: 1200px;
   margin: 0 auto;
   background-color: white;
-  box-shadow: 0 0 24px rgba(0,0,0,0.2);
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.2);
 }
 
 .profile-card {
@@ -444,7 +653,7 @@ export default {
 
 .showcase-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
@@ -464,22 +673,25 @@ export default {
   width: 100%;
   height: 150px;
   object-fit: cover;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .order-info {
   text-align: left;
-  padding: 10px;
+  padding: 15px;
 }
 
 .order-info h2 {
   font-size: 1.2rem;
-  margin: 0;
+  margin: 0 0 10px 0;
   color: #333;
 }
 
 .order-info p {
   margin: 5px 0 0;
   color: #555;
+  font-size: 0.9rem;
 }
 
 .status-picked {
@@ -492,9 +704,145 @@ export default {
   font-weight: 600;
 }
 
-.status-cancelled{
+.status-cancelled {
   color: #dc3545;
   font-weight: 600;
+}
+
+.status-completed {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.order-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.view-btn, .delete-btn {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.view-btn {
+  background-color: #f8d562;
+  color: white;
+}
+
+.view-btn:hover {
+  background-color: #f9a012;
+}
+
+.delete-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+.delete-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: #333;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.date-inputs {
+  display: flex;
+  gap: 10px;
+}
+
+.date-select {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  background-color: white;
+}
+
+.question-btn {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  background-color: #f8d562;
+  color: white;
+  margin-top: 15px;
+}
+
+.question-btn:hover {
+  background-color: #f9a012;
+}
+
+/* Success Notification */
+.notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px 30px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.notification.success {
+  background-color: #22c55e;
+}
+
+.notification.show {
+  opacity: 1;
 }
 
 @media (max-width: 768px) {
@@ -525,6 +873,19 @@ export default {
 
   .primary-btn, .secondary-btn {
     width: 100%;
+  }
+
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content {
+    width: 95%;
+    padding: 1rem;
+  }
+
+  .date-inputs {
+    flex-direction: column;
   }
 }
 </style>
