@@ -2,89 +2,129 @@
 
 这是一个基于 Vue.js 前端和 Python Flask 后端的汽车租赁平台项目。
 
+## 功能特性
+
+- 用户注册和登录
+- 浏览和筛选车辆
+- 车辆预订
+- 集成 Elasticsearch 实现车辆搜索
+
+## 环境搭建与运行指南
+
+### 1. 克隆仓库
+   ```bash
+   git clone <repository-url> # 请将 <repository-url> 替换为实际的仓库地址
+   cd car-rental-full
+   ```
+
+### 2. 后端配置 (Flask, MySQL & Elasticsearch)
+
+-   确保已安装并运行 Python, MySQL, 和 Elasticsearch。
+-   **数据库配置:**
+    1.  创建一个名为 `car_rental` 的 MySQL 数据库。
+    2.  导入项目根目录下的 `car_rent.sql` 文件到 `car_rental` 数据库中。这将创建必要的表结构。
+    3.  根据您的 MySQL 配置，修改后端 <mcfile name="app.py" path="c:\Users\DefineNX\Desktop\car-rental-full\app.py"></mcfile> 文件中的数据库连接字符串：
+        ```python
+        # app.py
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://your_mysql_user:your_mysql_password@your_mysql_host/car_rental'
+        ```
+        将 `your_mysql_user`, `your_mysql_password`, 和 `your_mysql_host` 替换为您的实际 MySQL 用户名、密码和主机地址（如果不是默认的 `root:root@localhost`）。
+-   **安装 Python 依赖:**
+    进入项目根目录 `car-rental-full`，建议创建并激活 Python 虚拟环境：
+    ```bash
+    python -m venv venv
+    # Windows 系统激活:
+    .\venv\Scripts\activate
+    # macOS/Linux 系统激活:
+    # source venv/bin/activate
+    
+    pip install -r requirements.txt
+    ```
+-   **Elasticsearch 配置:**
+    -   应用程序默认连接到 `http://localhost:9200` 的 Elasticsearch 服务。您可以在 <mcfile name="elasticsearch_utils.py" path="c:\Users\DefineNX\Desktop\car-rental-full\elasticsearch_utils.py"></mcfile> 文件中修改此配置。
+    -   **修改 Elasticsearch 默认密码:** 如果您刚安装 Elasticsearch，默认的 `elastic` 用户可能有一个生成的密码或者初始没有设置密码。要设置或更改 `elastic` 用户的密码：
+        -   导航到您的 Elasticsearch 安装目录。
+        -   运行密码重置工具。例如，在 Linux/macOS 上：
+            ```bash
+            ./bin/elasticsearch-reset-password -u elastic
+            ```
+            在 Windows 上：
+            ```bash
+            .\bin\elasticsearch-reset-password.bat -u elastic
+            ```
+        -   此命令将生成一个新密码，请记下它。
+        -   如果您启用了认证，请更新 <mcfile name="elasticsearch_utils.py" path="c:\Users\DefineNX\Desktop\car-rental-full\elasticsearch_utils.py"></mcfile> 中的 `http_auth`：
+            ```python
+            es = Elasticsearch(
+                ['http://localhost:9200'],
+                http_auth=('elastic', '您的新ELASTIC_PASSWORD') 
+            )
+            ```
+    -   **数据初始化:** 首次运行 Flask 后端时，系统会尝试：
+        1.  创建必要的数据库表（如果它们不存在）。
+        2.  使用 <mcfile name="app.py" path="c:\Users\DefineNX\Desktop\car-rental-full\app.py"></mcfile> 中 `MOCK_FRONTEND_CARS_DATA` 的示例车辆数据填充 `car_info` 表。
+        3.  创建一个名为 `cars` 的 Elasticsearch 索引（如果它不存在）。
+        4.  将示例车辆数据索引到 Elasticsearch。
+        这是一次性设置。如果 `car_info` 表中已有数据，则将跳过此初始同步。
+
+-   **启动 Flask 开发服务器:**
+    ```bash
+    python app.py
+    ```
+    后端服务将在 `http://localhost:5000` 上可用。
+
+### 3. 前端配置 (Vue.js)
+
+-   导航到前端目录：
+    ```bash
+    cd car-rental
+    ```
+-   **安装 Node.js 依赖:**
+    ```bash
+    npm install
+    ```
+-   **启动 Vue 开发服务器:**
+    ```bash
+    npm run dev
+    ```
+    前端应用将在 `http://localhost:5173` (或其他可用端口) 上可用，并可能在浏览器中自动打开。
+
+## 使用说明
+
+-   打开浏览器并访问 `http://localhost:5173`。
+-   注册新用户或使用已有账户登录。
+-   浏览可用车辆。在车辆展示页面使用搜索框通过 Elasticsearch 查找车辆。
+
 ## 项目结构
 
 ```
 ├── car-rental/              # Vue.js 前端项目
 │   ├── public/
 │   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   ├── router/
-│   │   ├── App.vue
-│   │   ├── main.js
-│   │   └── axios.js
+│   │   ├── assets/          # 静态资源 (图片、图标等)
+│   │   ├── components/      # Vue 组件
+│   │   ├── router/          # Vue Router 路由配置
+│   │   ├── services/        # API 服务调用
+│   │   ├── App.vue          # 根组件
+│   │   ├── main.js          # Vue 应用入口文件
+│   │   └── axios.js         # Axios 配置文件 (如果使用)
 │   ├── .gitignore
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js 
-├── app.py                   # Python Flask 后端应用
-├── requirements.txt         # Python 后端依赖
-├── car_rent.sql             # 数据库SQL文件
-├── 文档汇总/                  # 项目相关文档
+│   ├── index.html           # HTML 入口文件
+│   ├── package.json         # npm 包管理文件
+│   └── vite.config.js       # Vite 配置文件
+├── app.py                   # Python Flask 后端主应用文件
+├── elasticsearch_utils.py   # Elasticsearch 相关工具函数
+├── requirements.txt         # Python 后端依赖列表
+├── car_rent.sql             # MySQL 数据库结构和初始数据脚本
+├── 文档汇总/                  # 项目相关设计文档、图表等
 └── README.md                # 本 README 文件 (项目根目录)
 ```
 
 ## 技术栈
 
-*   **前端:** Vue 3, Vite, Vue Router, Naive UI, VueAMap (高德地图)
-*   **后端:** Python, Flask, Flask-SQLAlchemy, Flask-CORS, PyMySQL, bcrypt
+*   **前端:** Vue 3, Vite, Vue Router, Naive UI (或其他UI库), Axios (用于API请求)
+*   **后端:** Python, Flask, Flask-SQLAlchemy (ORM), Flask-CORS, PyMySQL, bcrypt (密码哈希), Elasticsearch (搜索)
 *   **数据库:** MySQL
-
-## 环境要求
-
-*   Node.js (推荐最新 LTS 版本，用于运行前端项目)
-*   Python (推荐 3.8+ 版本，用于运行后端项目)
-*   MySQL 数据库服务
-
-## 运行指南
-
-### 1. 数据库配置
-
-1.  确保你的 MySQL 服务正在运行。
-2.  创建一个名为 `car_rental` 的数据库。
-3.  导入项目根目录下的 `car_rent.sql` 文件到 `car_rental` 数据库中。这会创建必要的表和初始数据。
-4.  根据你的 MySQL 配置，修改后端 `app.py` 文件中的数据库连接字符串：
-    ```python
-    # app.py
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://your_mysql_user:your_mysql_password@your_mysql_host/car_rental'
-    ```
-    将 `your_mysql_user`, `your_mysql_password`, 和 `your_mysql_host` 替换为你的实际 MySQL 用户名、密码和主机地址（如果不是默认的 `root:root@localhost`）。
-
-### 2. 后端启动 (Python Flask)
-
-1.  打开终端，进入项目根目录 `car-rental-full`。
-2.  创建并激活 Python 虚拟环境 (推荐)：
-    ```bash
-    python -m venv venv
-    # Windows
-    .\venv\Scripts\activate
-    # macOS/Linux
-    # source venv/bin/activate
-    ```
-3.  安装后端依赖：
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  启动 Flask 应用：
-    ```bash
-    python app.py
-    ```
-    后端服务默认会在 `http://127.0.0.1:5000` 启动。
-
-### 3. 前端启动 (Vue.js)
-
-1.  打开新的终端，进入前端项目目录 `HZNU_car_rental-main/car-rental`。
-2.  安装前端依赖：
-    ```bash
-    npm install
-    ```
-3.  启动 Vite 开发服务器：
-    ```bash
-    npm run dev
-    ```
-    前端应用默认会在 `http://localhost:5173` (或其他可用端口) 启动，并在浏览器中自动打开。
-
 
 ## 注意事项
 

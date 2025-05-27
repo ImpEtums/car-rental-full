@@ -3,6 +3,10 @@
   <div class="car-showcase">
     <header class="showcase-header">
       <p>探索我们的精选车型，找到适合您的完美选择。</p>
+      <div class="search-bar-container">
+        <input type="text" v-model="searchQuery" @keyup.enter="performSearch" placeholder="搜索车型，如：本田、SUV..." class="search-input">
+        <button @click="performSearch" class="search-button">搜索</button>
+      </div>
     </header>
     <main>
       <div class="content-wrapper">
@@ -97,71 +101,115 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+const searchQuery = ref('')
+const originalCars = ref([]) // 保存原始车辆数据用于重置或无搜索时显示
+const cars = ref([]) // 用于展示的车辆数据，会根据搜索结果更新
 
 const getIconUrl = (iconName) => {
   return new URL(`../assets/images/icons/${iconName}`, import.meta.url).href
 }
 
-const cars = ref([
-  {
-    id: 1,
-    name: '本田雅阁',
-    image: new URL(`../assets/images/car1.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 358
-  },
-  {
-    id: 2,
-    name: '本田思域',
-    image: new URL(`../assets/images/car2.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 328
-  },
-  {
-    id: 3,
-    name: '丰田凯美瑞',
-    image: new URL(`../assets/images/car3.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 368
-  },
-  {
-    id: 4,
-    name: '大众帕萨特',
-    image: new URL(`../assets/images/car4.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 348
-  },
-  {
-    id: 5,
-    name: '现代索纳塔',
-    image: new URL(`../assets/images/car5.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 338
-  },
-  {
-    id: 6,
-    name: '夺命双头车',
-    image: new URL(`../assets/images/car6.png`, import.meta.url).href,
-    seats: 5,
-    fuelType: '汽油',
-    transmission: '自动',
-    price: 114514
-  },
-])
+// 初始化时，将静态数据赋值给 originalCars 和 cars
+onMounted(() => {
+  // 模拟从API获取或直接使用静态数据
+  const staticCars = [
+    {
+      id: 1,
+      name: '本田雅阁',
+      image: new URL(`../assets/images/car1.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 358
+    },
+    {
+      id: 2,
+      name: '本田思域',
+      image: new URL(`../assets/images/car2.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 328
+    },
+    {
+      id: 3,
+      name: '丰田凯美瑞',
+      image: new URL(`../assets/images/car3.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 368
+    },
+    {
+      id: 4,
+      name: '大众帕萨特',
+      image: new URL(`../assets/images/car4.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 348
+    },
+    {
+      id: 5,
+      name: '现代索纳塔',
+      image: new URL(`../assets/images/car5.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 338
+    },
+    {
+      id: 6,
+      name: '夺命双头车',
+      image: new URL(`../assets/images/car6.png`, import.meta.url).href,
+      seats: 5,
+      fuelType: '汽油',
+      transmission: '自动',
+      price: 114514
+    },
+  ];
+  originalCars.value = [...staticCars];
+  cars.value = [...staticCars];
+});
+
+const performSearch = async () => {
+  if (!searchQuery.value.trim()) {
+    cars.value = [...originalCars.value]; // 如果搜索词为空，显示所有车辆
+    return;
+  }
+  
+    // 注意：这里的URL需要根据你的实际后端API地址进行调整
+    const response = await fetch(`http://localhost:5000/api/search_cars?q=${encodeURIComponent(searchQuery.value)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const searchResults = await response.json();
+    console.log('Raw search results from ES:', searchResults); // 新增日志
+    // 将搜索结果更新到 cars ref
+    // ES 返回的数据结构可能与前端静态数据结构略有不同，需要适配
+    cars.value = searchResults.map(car_from_es => {
+      console.log('Processing car_from_es:', car_from_es); // 新增日志
+      console.log('car_from_es.image_url:', car_from_es.image_url); // 新增日志
+      const imageName = car_from_es.image_url ? car_from_es.image_url.split('/').pop() : 'default.png'; // 处理 image_url 可能为空的情况
+      console.log('Extracted image name:', imageName); // 新增日志
+      const finalImageUrl = new URL(`../assets/images/${imageName}`, import.meta.url).href;
+      console.log('Final image URL for template:', finalImageUrl); // 新增日志
+      return {
+        id: car_from_es.id,
+        name: car_from_es.name,
+        image: finalImageUrl,
+        seats: car_from_es.seats,
+        fuelType: car_from_es.fuel_type,
+        transmission: car_from_es.transmission,
+        price: car_from_es.price_per_day
+      };
+    });
+    console.log('Mapped cars for display:', cars.value); // 新增日志
+  };
 
 const handleCarClick = (car) => {
   router.push({
@@ -195,6 +243,42 @@ const handleCarClick = (car) => {
 .showcase-header p {
   font-size: 1.2rem;
   color: #555;
+  margin-bottom: 20px; /* 为搜索框腾出空间 */
+}
+
+.search-bar-container {
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.search-input {
+  padding: 10px 15px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px 0 0 4px;
+  width: 300px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #007bff;
+}
+
+.search-button {
+  padding: 10px 20px;
+  font-size: 1rem;
+  color: white;
+  background-color: #007bff;
+  border: 1px solid #007bff;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.search-button:hover {
+  background-color: #0056b3;
 }
 
 .content-wrapper {

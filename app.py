@@ -22,6 +22,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪
 # 初始化 SQLAlchemy
 db = SQLAlchemy(app)
 
+# 导入 Elasticsearch 工具模块
+from elasticsearch_utils import search_cars as es_search_cars, create_index_if_not_exists, bulk_index_cars, format_car_data_for_db, generate_insert_sql
+
 # 省份表模型
 class Province(db.Model):
     __tablename__ = 'province_info'
@@ -96,8 +99,179 @@ class Store(db.Model):
     country = db.relationship('Country', backref=db.backref('stores', lazy=True))
 
 # 创建数据库表（确保应用上下文中执行）
+# 模拟从前端获取的车辆数据 (与 CarShowcasePage.vue 中的数据一致)
+MOCK_FRONTEND_CARS_DATA = [
+    {
+        "id": 1,
+        "name": '本田雅阁',
+        "image": '../assets/images/car1.png', 
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 358
+    },
+    {
+        "id": 2,
+        "name": '本田思域',
+        "image": '../assets/images/car2.png',
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 328
+    },
+    {
+        "id": 3,
+        "name": '丰田凯美瑞',
+        "image": '../assets/images/car3.png',
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 368
+    },
+    {
+        "id": 4,
+        "name": '大众帕萨特',
+        "image": '../assets/images/car4.png',
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 348
+    },
+    {
+        "id": 5,
+        "name": '现代索纳塔',
+        "image": '../assets/images/car5.png',
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 338
+    },
+    {
+        "id": 6,
+        "name": '夺命双头车',
+        "image": '../assets/images/car6.png',
+        "seats": 5,
+        "fuelType": '汽油',
+        "transmission": '自动',
+        "price": 114514
+    },
+]
+
+def sync_cars_to_db_and_es():
+    """将数据库中的车辆数据同步到Elasticsearch。"""
+    with app.app_context():
+        cars_for_es_indexing = []
+        # 1. 创建 Elasticsearch 索引 (如果不存在)
+        create_index_if_not_exists('cars')
+
+        # 2. 从数据库查询所有车辆信息
+        all_cars_from_db = CarInfo.query.all()
+        if not all_cars_from_db:
+            print("No cars found in the database to sync.")
+            # 如果数据库没有数据，可以选择从 MOCK_FRONTEND_CARS_DATA 初始化数据库和ES
+            # 这里我们假设数据库应该有数据，如果没有则不进行同步
+            return
+
+        print(f"Found {len(all_cars_from_db)} cars in the database to sync to Elasticsearch.")
+
+        for db_car in all_cars_from_db:
+            # 3. 准备用于 Elasticsearch 的数据
+            # 确保字段名称与数据库表结构一致
+            
+            # 将数字代码转换为文本描述
+            fuel_type_map = {0: '汽油', 1: '柴油', 2: '电动', 3: '混合动力', 4: '混动'}
+            transmission_map = {0: '自动', 1: '手动', 2: '自动'}
+            
+            fuel_type_text = fuel_type_map.get(db_car.fuel_type, '未知')
+            transmission_text = transmission_map.get(db_car.transmission_type, '未知')
+            
+            es_car_data = {
+                'id': db_car.car_id, # 使用数据库的 car_id 作为 ES 的 id
+                'name': f"{db_car.brand} {db_car.model}", # 组合品牌和型号作为车辆名称
+                'brand': db_car.brand,
+                'model': db_car.model,
+                'seats': 5, # 默认5座，如果有car_type关联可以从那里获取
+                'fuel_type': fuel_type_text,
+                'transmission': transmission_text,
+                'price_per_day': 300, # 默认价格，如果有car_type关联可以从那里获取
+                'image_url': db_car.car_images, # 直接使用数据库中的 car_images 字段
+                'description': f"{db_car.brand} {db_car.model} 是一款{fuel_type_text}车，配备{transmission_text}变速箱。",
+                'availability': db_car.rental_status == 0,  # rental_status 0 表示可用
+                'color': db_car.color,
+                'mileage': db_car.mileage,
+                'car_number': db_car.car_number, # 车牌号
+                'engine_capacity': db_car.engine_capacity, # 排量
+                'gps_device': db_car.gps_device, # GPS设备
+                'last_maintain_time': db_car.last_maintain_time.isoformat() if db_car.last_maintain_time else None,
+                'next_maintain_mileage': db_car.next_maintain_mileage,
+                'buy_time': db_car.buy_time.isoformat() if db_car.buy_time else None,
+                'car_condition': db_car.car_condition,
+            }
+            cars_for_es_indexing.append(es_car_data)
+
+        # 4. 批量索引到 Elasticsearch
+        if cars_for_es_indexing:
+            bulk_index_cars('cars', cars_for_es_indexing)
+            print(f"Successfully indexed {len(cars_for_es_indexing)} cars to Elasticsearch.")
+        else:
+            print("No cars to index to Elasticsearch based on current DB content.")
+
+# 车辆信息表模型 (需要确保在 sync_cars_to_db_and_es 之前定义)
+class CarInfo(db.Model):
+    __tablename__ = 'car_info'
+
+    car_id = db.Column(db.Integer, primary_key=True)
+    type_id = db.Column(db.Integer, db.ForeignKey('car_type_info.type_id'), nullable=True)
+    car_number = db.Column(db.String(20), nullable=False, unique=True)
+    brand = db.Column(db.String(50))
+    model = db.Column(db.String(50))
+    color = db.Column(db.String(20))
+    buy_time = db.Column(db.Date)
+    mileage = db.Column(db.Integer)
+    rental_status = db.Column(db.SmallInteger) # 使用 SmallInteger 替代 tinyint
+    car_condition = db.Column(db.SmallInteger)
+    transmission_type = db.Column(db.SmallInteger)
+    fuel_type = db.Column(db.SmallInteger)
+    engine_capacity = db.Column(db.String(20))
+    gps_device = db.Column(db.String(50))
+    last_maintain_time = db.Column(db.Date)
+    next_maintain_mileage = db.Column(db.Integer)
+    car_images = db.Column(db.String(1000)) # 存储图片路径或MinIO的key
+
+    # 如果有 car_type_info 表，可以建立关系
+    # car_type = db.relationship('CarTypeInfo', backref=db.backref('cars', lazy=True))
+
+# 车辆类型信息表模型 (如果需要关联)
+class CarTypeInfo(db.Model):
+    __tablename__ = 'car_type_info'
+    type_id = db.Column(db.Integer, primary_key=True)
+    type_name = db.Column(db.String(50), nullable=False)
+    seat_num = db.Column(db.Integer)
+    price_per_day = db.Column(db.Numeric(10, 2)) # 使用 Numeric 对应 decimal
+
 with app.app_context():
     db.create_all()
+    # 在应用启动时执行一次数据同步
+    # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
+    # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
+    if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
+        print("Car_info table is empty. Attempting to sync data...")
+        print("Attempting to sync data from DB to ES during startup...")
+        sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
+    else:
+        print("Car_info table already contains data. Forcing sync for development.")
+        sync_cars_to_db_and_es()
+
+@app.route('/api/search_cars', methods=['GET'])
+def api_search_cars():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({'error': 'Query parameter q is required'}), 400
+    
+    results = es_search_cars(query_string=query, index_name='cars')
+    return jsonify(results)
+
+@app.route('/api/check_user', methods=['POST'])
 
 @app.route('/api/check_user', methods=['POST'])
 def check_user():
