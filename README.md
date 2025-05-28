@@ -4,7 +4,8 @@
 
 ## 功能特性
 
-- 用户注册和登录
+- 用户注册和登录（基于 JWT 进行安全认证）
+- 用户密码哈希加密存储。
 - 浏览和筛选车辆
 - 车辆预订
 - 集成 Elasticsearch 实现车辆搜索
@@ -19,7 +20,7 @@
 
 ### 2. 后端配置 (Flask, MySQL & Elasticsearch)
 
--   确保已安装并运行 Python, MySQL, 和 Elasticsearch。
+-   确保已安装并运行Node.js (推荐 v14.x 或更高版本)， Python, MySQL, 和 Elasticsearch。
 -   **数据库配置:**
     1.  创建一个名为 `car_rental` 的 MySQL 数据库。
     2.  导入项目根目录下的 `car_rent.sql` 文件到 `car_rental` 数据库中。这将创建必要的表结构。
@@ -73,6 +74,15 @@
     ```
     后端服务将在 `http://localhost:5000` 上可用。
 
+-   **启动后端服务 (node-api)：**
+
+        1.  在确保所有后端依赖都已安装，且数据库和日志目录配置正确后，进入 node-api 目录并运行以下命令：
+     ```bash
+    cd node-api
+    node app.js
+    ```
+    后端服务将在 `http://localhost:5000` 上可用。
+    
 ### 3. 前端配置 (Vue.js)
 
 -   导航到前端目录：
@@ -123,14 +133,18 @@
 ## 技术栈
 
 *   **前端:** Vue 3, Vite, Vue Router, Naive UI (或其他UI库), Axios (用于API请求)
-*   **后端:** Python, Flask, Flask-SQLAlchemy (ORM), Flask-CORS, PyMySQL, bcrypt (密码哈希), Elasticsearch (搜索)
+*   **后端:**
+*    Python 后端: Flask, Flask-SQLAlchemy (ORM), Flask-CORS, PyMySQL, bcrypt (密码哈希), Elasticsearch (搜索)
+*    Node.js 后端 (本次新增): Node.js, Express.js, JWT (JSON Web Tokens), Winston (日志), Bcrypt.js (密码哈希)
 *   **数据库:** MySQL
 
 ## 注意事项
 
 *   后端 `app.py` 中的 `app.config['SECRET_KEY'] = 'your_secret_key'` 应该替换为一个更安全的密钥。
 *   确保后端 CORS 配置 `CORS(app, origins="http://localhost:5173", supports_credentials=True)` 中的 `origins` 与你前端运行的地址和端口一致。
-
+*   启动 Node.js 后端服务前的必要步骤。
+*   确保您的 MySQL 数据库已启动并可访问。
+*   修改 .env 文件： 在 node-api 项目的根目录下修 .env 文件（如果它不存在），并添加您的数据库连接密码
 
 
 # YJH聊天窗需要注意的地方
