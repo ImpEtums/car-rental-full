@@ -2,8 +2,8 @@ from minio import Minio
 from minio.error import S3Error
 import os
 from datetime import timedelta
-from werkzeug.utils import secure_filename
 import uuid
+import json
 
 # 导入配置
 from .minio_config import MINIO_CONFIG, UPLOAD_CONFIG, URL_CONFIG
@@ -39,7 +39,6 @@ def set_bucket_public_read_policy(bucket_name=BUCKET_NAME):
             ]
         }
         
-        import json
         minio_client.set_bucket_policy(bucket_name, json.dumps(policy))
         print(f"Bucket '{bucket_name}' set to public read-only access.")
         return True
@@ -223,7 +222,6 @@ def migrate_local_images_to_minio(local_images_dir, bucket_name=BUCKET_NAME):
             local_file_path = os.path.join(local_images_dir, filename)
             
             # 生成MinIO对象名称
-            file_extension = os.path.splitext(filename)[1]
             object_name = f"cars/{filename}"
             
             # 上传文件
