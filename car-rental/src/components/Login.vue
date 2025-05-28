@@ -1,15 +1,12 @@
 <template>
   <div class="login-container">
-    <!-- 添加白云元素 -->
     <div class="cloud cloud1"></div>
     <div class="cloud cloud2"></div>
     <div class="cloud cloud3"></div>
-    <!-- 添加新的4朵云朵 -->
     <div class="cloud cloud4"></div>
     <div class="cloud cloud5"></div>
     <div class="cloud cloud6"></div>
     <div class="cloud cloud7"></div>
-    <!-- 添加太阳 -->
     <div class="sun"></div>
     <div class="road-container">
       <div class="road">
@@ -19,21 +16,18 @@
           <div class="headlight"></div>
           <div class="exhaust"></div>
         </div>
-        <!-- 添加新的粉色小车 -->
         <div class="pink-car">
           <div class="pink-rear-wheel"></div>
           <div class="pink-front-wheel"></div>
           <div class="pink-headlight"></div>
           <div class="pink-exhaust"></div>
         </div>
-        <!-- 添加蓝色小车 -->
         <div class="blue-car">
           <div class="blue-rear-wheel"></div>
           <div class="blue-front-wheel"></div>
           <div class="blue-headlight"></div>
           <div class="blue-exhaust"></div>
         </div>
-        <!-- 添加绿色小车 -->
         <div class="green-car">
           <div class="green-rear-wheel"></div>
           <div class="green-front-wheel"></div>
@@ -43,9 +37,7 @@
         <div class="line"></div>
       </div>
     </div>
-    <!-- 添加高楼 -->
     <div class="buildings-container">
-      <!-- 增加房子数量 -->
       <div class="building building1"></div>
       <div class="building building2"></div>
       <div class="building building3"></div>
@@ -97,65 +89,80 @@
 </template>
 
 <script>
-// 引入配置好的 axios 实例
-import axiosInstance from '@/axios';
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import { nodeApiService } from '@/axios';
 
 export default {
-  data() {
-    return {
-      username: '',
-      password: '',
-      errorMessage: ''
-    };
-  },
-  methods: {
-    async handleLogin() {
-      this.errorMessage = '';  // 清除之前的错误信息
+  name: 'Login',
+  setup() {
+    const router = useRouter();
+    const username = ref('');
+    const password = ref('');
+    const errorMessage = ref('');
+
+    const handleLogin = async () => {
+      errorMessage.value = '';
+
       try {
-        const response = await axiosInstance.post('/api/login', {
-          username: this.username,
-          password: this.password
-        }, {
-          withCredentials: true  // 添加 withCredentials 选项，确保 cookie 被携带
+        const response = await nodeApiService.post('/auth/login', {
+          username: username.value,
+          password: password.value
         });
 
-        // 登录成功，后端处理 session 信息
-        if (response.data.status === 'success') {
-          localStorage.setItem('token', response.data.token || response.data.userId); // 优先使用token，没有token则使用userId
-          // 登录成功后跳转到个人信息页面
-          this.$router.push('/profile');
+        // *** 核心修改：检查 response.data.message 是否包含 '登录成功' ***
+        if (response.data && response.data.message && response.data.message.includes('登录成功')) {
+          const { token, userId, username: loggedInUsername } = response.data;
+          
+          localStorage.setItem('token', token);
+          localStorage.setItem('userId', userId);
+          localStorage.setItem('username', loggedInUsername);
+
+          ElMessage.success('登录成功！');
+
+          router.push({ name: 'Profile' });
         } else {
-          this.errorMessage = response.data.message || '登录失败';
+          // 如果 message 字段存在但不是 '登录成功'，或者 success 字段为 false
+          errorMessage.value = response.data.message || '登录失败，请重试。';
+          ElMessage.error(errorMessage.value);
         }
       } catch (error) {
+        console.error('登录请求失败:', error);
         if (error.response) {
           const status = error.response.status;
           const message = error.response.data.message;
 
-          if (status === 404) {
-            // 用户不存在
-            this.errorMessage = message || '该用户不存在，请检查用户名';
-          } else if (status === 400) {
-            // 密码错误
-            this.errorMessage = message || '密码错误，请检查您的密码';
+          if (status === 400) {
+            errorMessage.value = message || '用户名或密码不正确。';
+          } else if (status === 404) {
+            errorMessage.value = '登录服务不可用，请联系管理员。';
           } else if (status === 500) {
-            // 后端服务器错误
-            this.errorMessage = '服务器错误，请稍后再试';
+            errorMessage.value = '服务器内部错误，请稍后再试。';
           } else {
-            // 网络错误或其他未知错误
-            this.errorMessage = message || '网络错误，请稍后再试';
+            errorMessage.value = message || `登录时发生未知错误，状态码: ${status}。`;
           }
+        } else if (error.request) {
+          errorMessage.value = '网络连接失败，请检查您的网络。';
         } else {
-          // 请求发送失败
-          this.errorMessage = '请求失败，请稍后再试';
+          errorMessage.value = '请求设置错误，请联系技术支持。';
         }
+        ElMessage.error(errorMessage.value);
       }
-    }
+    };
+
+    return {
+      username,
+      password,
+      errorMessage,
+      handleLogin
+    };
   }
 };
 </script>
 
 <style scoped>
+/* 您的所有 CSS 样式保持不变 */
 .login-container {
   display: flex;
   justify-content: center;
@@ -988,6 +995,4 @@ export default {
   height: 200px;
   background-color:rgb(219, 145, 7);
 }
-
-
 </style>

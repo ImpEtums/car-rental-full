@@ -1,11 +1,9 @@
 <template>
   <div class="profile-container">
-    <!-- 封面图片 -->
     <div class="cover-image">
       <img src="@/assets/images/profile.jpg" alt="背景图片" />
     </div>
 
-    <!-- 个人信息卡片 -->
     <div class="profile-card">
       <div class="profile-header">
         <div class="avatar-container">
@@ -58,7 +56,6 @@
       </form>
     </div>
 
-    <!-- 我的订单区域 -->
     <div class="orders-section">
       <h2>我的订单</h2>
       <div class="showcase-grid">
@@ -85,7 +82,6 @@
         </div>
       </div>
 
-      <!-- Order View Modal -->
       <div v-if="viewingOrder" class="modal-overlay">
         <div class="modal-content">
           <h2>查看订单</h2>
@@ -130,7 +126,6 @@
         </div>
       </div>
 
-      <!-- Feedback Modal -->
       <div v-if="isFeedbackModalOpen" class="modal-overlay">
         <div class="modal-content">
           <h2>订单反馈</h2>
@@ -156,7 +151,6 @@
         </div>
       </div>
 
-      <!-- Success Notification -->
       <div v-if="showSuccessNotification" class="notification success">
         <p>{{ successMessage }}</p>
       </div>
@@ -165,7 +159,10 @@
 </template>
 
 <script>
-import axiosInstance from '@/axios';
+// 导入 Node.js 和 Flask 的 Axios 实例
+import { flaskApiService, nodeApiService } from '@/axios';
+// 如果你需要路由跳转，请确保正确导入 router 实例
+// import router from '@/router';
 
 export default {
   data() {
@@ -174,11 +171,12 @@ export default {
         user_id: '',
         username: '',
         email: '',
-        real_name: '',
-        id_number: '',
+        real_name: '', // 映射 Node.js 后端返回的 realName
+        id_number: '', // 映射 Node.js 后端返回的 idNumber
         phone: '',
-        register_time: '',
+        register_time: '', // 映射 Node.js 后端返回的 createdAt
       },
+      // 订单数据，如果未来从 Node.js 后端获取，也需要调整
       orders: [
         {
           order_id: 1,
@@ -359,32 +357,53 @@ export default {
     },
     async fetchUserInfo() {
       try {
-        const response = await axiosInstance.get('/api/get_user_info', {
-          withCredentials: true,
-        });
+        // *** 关键修改：使用 nodeApiService 调用 Node.js 后端 API ***
+        const response = await nodeApiService.get('/auth/me'); // 调用你的个人中心 API
 
-        if (response.data.status === 'success') {
-          this.user = response.data.user;
+        // 根据 Node.js 后端 /auth/me 接口的响应格式来处理
+        if (response.data && response.data.user) {
+          // 将 Node.js 后端返回的 camelCase 字段映射到 Vue 模板使用的 snake_case
+          this.user.user_id = response.data.user.userId;
+          this.user.username = response.data.user.username;
+          this.user.email = response.data.user.email;
+          this.user.real_name = response.data.user.realName; // 映射
+          this.user.id_number = response.data.user.idNumber; // 映射
+          this.user.phone = response.data.user.phone;
+          // this.user.register_time = response.data.user.createdAt; // 映射
+          this.user.register_time = response.data.user.registerTime; // 这里是修正！
         } else {
-          console.error('获取用户信息失败:', response.data.message);
+          console.error('获取用户信息失败: 响应数据格式不正确', response.data);
+          // 可以设置一个错误消息显示给用户
+          this.error = '无法获取个人中心数据，请检查后端响应。';
         }
       } catch (error) {
         console.error('获取用户信息失败:', error);
+        // 如果是 401/403，nodeApiService 的响应拦截器应该已经处理并清除了 token
+        // 这里可以根据需要提示用户或重定向
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          console.log('用户认证失败或过期，尝试重新登录...');
+          // this.$router.push('/login'); // 如果需要强制跳转
+        }
+        this.error = '获取个人中心数据失败。请检查网络或重新登录。';
       }
     },
+    // 注意：handleUpdate 和 logout 如果也要更新/操作 Node.js 后端的用户信息，
+    // 也应该修改为使用 nodeApiService，并确保后端有对应的 API 路由。
     async handleUpdate() {
       try {
-        const response = await axiosInstance.put('/api/update_user_info', {
-          user_id: this.user.user_id,
+        // 假设更新用户信息也是通过 Node.js 后端完成
+        const response = await nodeApiService.put('/auth/update_profile', { // 假设后端更新用户信息的API是 /api/auth/update_profile
           username: this.user.username,
           email: this.user.email,
           phone: this.user.phone,
-        }, {
-          withCredentials: true,
+          // real_name 和 id_number 通常不允许前端修改，或者在后端进行校验
+          // 如果后端允许修改，这里也需要传递它们
         });
 
-        if (response.data.status === 'success') {
+        if (response.data.message === 'User profile updated successfully') { // 假设后端成功时返回这样的消息
           alert('信息更新成功');
+          // 重新获取用户信息以确保视图同步
+          this.fetchUserInfo();
         } else {
           alert('更新失败: ' + response.data.message);
         }
@@ -395,18 +414,17 @@ export default {
     },
     async logout() {
       try {
-        const response = await axiosInstance.post('/api/logout', {}, {
-          withCredentials: true,
-        });
-
-        if (response.data.status === 'success') {
-          this.$router.push('/login');
-        } else {
-          alert('退出失败: ' + response.data.message);
-        }
+        // 假设退出登录是由 Node.js 后端处理 JWT Token
+        // Node.js 后端的 logout 通常只需清除前端的 token，后端不需要做额外操作
+        // 如果后端有会话管理或黑名单机制，再考虑调用后端 API
+        localStorage.removeItem('jwt_token'); // 清除前端保存的 JWT
+        localStorage.removeItem('user_id'); // 清除其他可能保存的用户信息
+        localStorage.removeItem('username');
+        alert('您已成功退出登录。');
+        this.$router.push('/login'); // 跳转到登录页面
       } catch (error) {
         console.error('退出登录失败:', error);
-        alert('退出失败');
+        alert('退出失败: ' + (error.message || '未知错误'));
       }
     },
     viewOrder(order) {
@@ -428,8 +446,11 @@ export default {
       }
       
       if (confirm('确定要删除此订单吗？')) {
-        // In a real app, you would call an API here
+        // In a real app, you would call an API here (可能通过 Flask 或 Node.js 后端)
         this.orders.splice(index, 1);
+        this.successMessage = '订单已删除。';
+        this.showSuccessNotification = true;
+        setTimeout(() => { this.showSuccessNotification = false; }, 3000);
       }
     },
     submitFeedback() {
@@ -439,17 +460,15 @@ export default {
       }
       
       if (confirm('确认提交反馈吗？')) {
-        // 这里可以添加提交反馈到后端的逻辑
+        // 这里可以添加提交反馈到后端的逻辑 (可能通过 Flask 或 Node.js 后端)
         console.log('反馈已提交：', {
           selectedFeedbackOption: this.selectedFeedbackOption,
           feedbackDetail: this.feedbackDetail,
         });
         
-        // 显示成功提示
         this.successMessage = '提交成功，后续有结果将联系您解决';
         this.showSuccessNotification = true;
         
-        // 3秒后隐藏提示
         setTimeout(() => {
           this.showSuccessNotification = false;
         }, 3000);
@@ -462,7 +481,6 @@ export default {
     cancelFeedback() {
       if (this.selectedFeedbackOption || this.feedbackDetail) {
         if (confirm('是否保存此次提交内容？')) {
-          // 这里可以添加保存反馈内容的逻辑
           console.log('反馈内容已保存：', {
             selectedFeedbackOption: this.selectedFeedbackOption,
             feedbackDetail: this.feedbackDetail,
@@ -484,6 +502,7 @@ export default {
 </script>
 
 <style scoped>
+/* 你的 CSS 样式保持不变 */
 .page-container {
   min-height: 100vh;
   background-color: #f5f5f5;

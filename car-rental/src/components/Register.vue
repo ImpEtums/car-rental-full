@@ -1,15 +1,12 @@
 <template>
   <div class="register-container">
-    <!-- 添加白云元素 -->
     <div class="cloud cloud1"></div>
     <div class="cloud cloud2"></div>
     <div class="cloud cloud3"></div>
-    <!-- 添加新的4朵云朵 -->
     <div class="cloud cloud4"></div>
     <div class="cloud cloud5"></div>
     <div class="cloud cloud6"></div>
     <div class="cloud cloud7"></div>
-    <!-- 添加太阳 -->
     <div class="sun"></div>
     <div class="road-container">
       <div class="road">
@@ -19,21 +16,18 @@
           <div class="headlight"></div>
           <div class="exhaust"></div>
         </div>
-        <!-- 添加新的粉色小车 -->
         <div class="pink-car">
           <div class="pink-rear-wheel"></div>
           <div class="pink-front-wheel"></div>
           <div class="pink-headlight"></div>
           <div class="pink-exhaust"></div>
         </div>
-        <!-- 添加蓝色小车 -->
         <div class="blue-car">
           <div class="blue-rear-wheel"></div>
           <div class="blue-front-wheel"></div>
           <div class="blue-headlight"></div>
           <div class="blue-exhaust"></div>
         </div>
-        <!-- 添加绿色小车 -->
         <div class="green-car">
           <div class="green-rear-wheel"></div>
           <div class="green-front-wheel"></div>
@@ -43,9 +37,7 @@
         <div class="line"></div>
       </div>
     </div>
-    <!-- 添加高楼 -->
     <div class="buildings-container">
-      <!-- 增加房子数量 -->
       <div class="building building1"></div>
       <div class="building building2"></div>
       <div class="building building3"></div>
@@ -66,105 +58,95 @@
     <div class="form-box">
       <h2 class="form-title">用户注册</h2>
       <form @submit.prevent="handleRegister">
-        <!-- 用户名输入框 -->
         <div class="input-group">
           <label for="username">用户名</label>
           <input
-              type="text"
-              v-model="user.username"
-              id="username"
-              placeholder="请输入用户名"
-              required
+            type="text"
+            v-model="user.username"
+            id="username"
+            placeholder="请输入用户名"
+            required
           />
           <span v-if="usernameError" class="error-message">{{ usernameError }}</span>
         </div>
 
-        <!-- 邮箱输入框 -->
         <div class="input-group">
           <label for="email">邮箱</label>
           <input
-              type="email"
-              v-model="user.email"
-              id="email"
-              placeholder="请输入邮箱"
-              required
+            type="email"
+            v-model="user.email"
+            id="email"
+            placeholder="请输入邮箱"
+            required
           />
           <span v-if="emailError" class="error-message">{{ emailError }}</span>
         </div>
 
-        <!-- 密码输入框 -->
         <div class="input-group">
           <label for="password">密码</label>
           <input
-              type="password"
-              v-model="user.password"
-              id="password"
-              placeholder="请输入密码"
-              required
+            type="password"
+            v-model="user.password"
+            id="password"
+            placeholder="请输入密码"
+            required
           />
         </div>
 
-        <!-- 确认密码输入框 -->
         <div class="input-group">
           <label for="confirmPassword">确认密码</label>
           <input
-              type="password"
-              v-model="confirmPassword"
-              id="confirmPassword"
-              placeholder="请确认密码"
-              required
+            type="password"
+            v-model="confirmPassword"
+            id="confirmPassword"
+            placeholder="请确认密码"
+            required
           />
         </div>
 
-        <!-- 真实姓名输入框 -->
         <div class="input-group">
           <label for="real_name">真实姓名</label>
           <input
-              type="text"
-              v-model="user.real_name"
-              id="real_name"
-              placeholder="请输入真实姓名"
-              required
+            type="text"
+            v-model="user.real_name"
+            id="real_name"
+            placeholder="请输入真实姓名"
+            required
           />
           <span v-if="realNameError" class="error-message">{{ realNameError }}</span>
         </div>
 
-        <!-- 手机号码输入框 -->
         <div class="input-group">
           <label for="phone">手机号码</label>
           <input
-              type="text"
-              v-model="user.phone"
-              id="phone"
-              placeholder="请输入手机号码"
-              required
+            type="text"
+            v-model="user.phone"
+            id="phone"
+            placeholder="请输入手机号码"
+            required
           />
           <span v-if="phoneError" class="error-message">{{ phoneError }}</span>
         </div>
 
-        <!-- 身份证号码输入框 -->
         <div class="input-group">
           <label for="id_number">身份证号码</label>
           <input
-              type="text"
-              v-model="user.id_number"
-              id="id_number"
-              placeholder="请输入身份证号码"
-              required
+            type="text"
+            v-model="user.id_number"
+            id="id_number"
+            placeholder="请输入身份证号码"
+            required
           />
           <span v-if="idNumberError" class="error-message">{{ idNumberError }}</span>
         </div>
 
-        <!-- 提交按钮 -->
         <button type="submit" class="submit-btn">注册</button>
       </form>
 
-      <!-- 跳转登录页面链接 -->
       <div class="link-to-login">
         <p>已有账号？ <router-link to="/login">登录</router-link></p>
       </div>
 
-      <!-- 显示服务器错误信息 -->
       <div v-if="serverError" class="error-message">
         {{ serverError }}
       </div>
@@ -173,9 +155,11 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { nodeApiService } from '@/axios';
+import { ElMessage } from 'element-plus'; // 引入 Element Plus 的消息提示
 
 export default {
+  name: 'Register', // 建议添加组件名称，便于调试
   data() {
     return {
       user: {
@@ -222,58 +206,50 @@ export default {
       this.phoneError = '';
       this.realNameError = '';
       this.idNumberError = '';
-      this.serverError = '';  // 清除服务器错误信息
+      this.serverError = '';
 
-      // 校验密码一致性
+      // 客户端校验：密码一致性
       if (this.user.password !== this.confirmPassword) {
         this.serverError = '密码和确认密码不一致！';
+        ElMessage.error(this.serverError);
         return;
       }
 
-      // 校验身份证号码格式
+      // 客户端校验：身份证号码格式
       if (!this.isValidIDCard(this.user.id_number)) {
         this.idNumberError = '身份证号码无效，请重新输入。';
+        ElMessage.error(this.idNumberError);
         return;
       }
 
-      // 校验手机号码格式
+      // 客户端校验：手机号码格式
       if (!this.isValidPhone(this.user.phone)) {
         this.phoneError = '手机号码格式无效，请重新输入。';
+        ElMessage.error(this.phoneError);
         return;
       }
 
-      // 校验邮箱格式
+      // 客户端校验：邮箱格式
       if (!this.isValidEmail(this.user.email)) {
         this.emailError = '邮箱格式无效，请重新输入。';
+        ElMessage.error(this.emailError);
         return;
       }
 
-      // 校验其他字段的格式
+      // 客户端校验：其他字段的空值检查
       if (!this.user.username) {
         this.usernameError = '用户名不能为空！';
+        ElMessage.error(this.usernameError);
         return;
       }
       if (!this.user.real_name) {
         this.realNameError = '真实姓名不能为空！';
+        ElMessage.error(this.realNameError);
         return;
       }
 
-      // 验证用户名、手机号、邮箱是否已存在
       try {
-        const checkResponse = await axios.post('http://localhost:5000/api/check_user', {
-          username: this.user.username,
-          phone: this.user.phone,
-          email: this.user.email,
-          id_number: this.user.id_number
-        });
-
-        if (checkResponse.data.message !== '验证通过') {
-          this.serverError = checkResponse.data.message;
-          return;
-        }
-
-        // 注册接口
-        const registerResponse = await axios.post('http://localhost:5000/api/register_user', {
+        const registerResponse = await nodeApiService.post('/auth/register', {
           username: this.user.username,
           email: this.user.email,
           password: this.user.password,
@@ -282,18 +258,43 @@ export default {
           id_number: this.user.id_number
         });
 
-        if (registerResponse.data.success) {
+        // *** 核心修改：根据后端返回的 message 字段判断成功 ***
+        if (registerResponse.data && registerResponse.data.message === '用户注册成功') {
           this.serverError = ''; // 清除错误信息
-          alert('注册成功！');
-          // 跳转到登录页
-          this.$router.push('/login');
+
+          ElMessage.success('注册成功！即将跳转到登录页。');
+
+          // 注册成功后跳转到登录页
+          this.$router.push({ name: 'Login' }); // 使用路由的 name 进行跳转，更稳定
         } else {
-          // 显示服务器返回的错误信息
+          // 后端返回了不符合预期成功的消息，或者其他业务逻辑错误
           this.serverError = registerResponse.data.message || '注册失败，请稍后再试！';
+          ElMessage.error(this.serverError);
         }
       } catch (error) {
-        // 捕获请求错误并显示
-        this.serverError = error.response ? error.response.data.message : '服务器错误，请稍后再试';
+        console.error('注册请求失败:', error); // 输出详细错误到控制台
+
+        if (error.response) {
+          const status = error.response.status;
+          const message = error.response.data.message;
+
+          if (status === 400) {
+            this.serverError = message || '注册信息无效，请检查输入。';
+          } else if (status === 409) { // 假设 409 Conflict 表示用户已存在等冲突
+            this.serverError = message || '用户已存在或信息冲突。';
+          } else if (status === 500) {
+            this.serverError = '服务器内部错误，请稍后再试。';
+          } else {
+            this.serverError = message || `注册时发生未知错误，状态码: ${status}。`;
+          }
+        } else if (error.request) {
+          // 请求已发送但没有收到响应 (通常是网络问题或后端服务未运行)
+          this.serverError = '网络连接失败，请检查您的网络或后端服务是否运行。';
+        } else {
+          // 其他错误（如请求设置错误）
+          this.serverError = '请求设置错误，请联系技术支持。';
+        }
+        ElMessage.error(this.serverError);
       }
     }
   }
@@ -301,6 +302,7 @@ export default {
 </script>
 
 <style scoped>
+/* 保持你的所有 CSS 样式不变 */
 .register-container {
   display: flex;
   justify-content: center;
@@ -1125,6 +1127,5 @@ export default {
   height: 200px;
   background-color:rgb(219, 145, 7);
 }
-
 
 </style>

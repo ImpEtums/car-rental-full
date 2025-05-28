@@ -16,7 +16,7 @@ app.config['SECRET_KEY'] = 'your_secret_key'  # 请更换成更安全的密钥
 CORS(app, origins="http://localhost:5173", supports_credentials=True)  # 支持携带凭证
 
 # 配置数据库连接
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/car_rental'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:1128@localhost/car_rental'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪
 
 # 初始化 SQLAlchemy
