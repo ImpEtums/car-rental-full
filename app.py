@@ -1,10 +1,22 @@
 import json
 from datetime import datetime
+import os
+from werkzeug.utils import secure_filename
 
 import bcrypt
 from flask import Flask, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+
+# 导入MinIO工具模块
+from minio_service.minio_utils import (
+    upload_file_data_to_minio, 
+    get_file_url, 
+    get_public_file_url,
+    delete_file_from_minio,
+    migrate_local_images_to_minio,
+    create_bucket_if_not_exists
+)
 
 # 创建 Flask 应用
 app = Flask(__name__)
@@ -21,6 +33,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪
 
 # 初始化 SQLAlchemy
 db = SQLAlchemy(app)
+
+# 导入 Elasticsearch 工具模块
+from elasticsearch_utils import search_cars as es_search_cars, create_index_if_not_exists, bulk_index_cars, format_car_data_for_db, generate_insert_sql
 
 # 省份表模型
 class Province(db.Model):
@@ -96,8 +111,227 @@ class Store(db.Model):
     country = db.relationship('Country', backref=db.backref('stores', lazy=True))
 
 # 创建数据库表（确保应用上下文中执行）
+
+def sync_cars_to_db_and_es():
+    """将数据库中的车辆数据同步到Elasticsearch。"""
+    with app.app_context():
+        cars_for_es_indexing = []
+        # 1. 创建 Elasticsearch 索引 (如果不存在)
+        create_index_if_not_exists('cars')
+
+        # 2. 从数据库查询所有车辆信息
+        all_cars_from_db = CarInfo.query.all()
+        if not all_cars_from_db:
+            print("No cars found in the database to sync.")
+            # 如果数据库没有数据，需要先通过其他方式添加车辆数据到数据库
+            # 这里我们假设数据库应该有数据，如果没有则不进行同步
+            return
+
+        print(f"Found {len(all_cars_from_db)} cars in the database to sync to Elasticsearch.")
+
+        for db_car in all_cars_from_db:
+            # 3. 准备用于 Elasticsearch 的数据
+            # 确保字段名称与数据库表结构一致
+            
+            # 将数字代码转换为文本描述
+            fuel_type_map = {0: '汽油', 1: '柴油', 2: '电动', 3: '混合动力', 4: '混动'}
+            transmission_map = {0: '自动', 1: '手动', 2: '自动'}
+            
+            fuel_type_text = fuel_type_map.get(db_car.fuel_type, '未知')
+            transmission_text = transmission_map.get(db_car.transmission_type, '未知')
+            
+            es_car_data = {
+                'id': db_car.car_id, # 使用数据库的 car_id 作为 ES 的 id
+                'name': f"{db_car.brand} {db_car.model}", # 组合品牌和型号作为车辆名称
+                'brand': db_car.brand,
+                'model': db_car.model,
+                'seats': 5, # 默认5座，如果有car_type关联可以从那里获取
+                'fuel_type': fuel_type_text,
+                'transmission': transmission_text,
+                'price_per_day': 300, # 默认价格，如果有car_type关联可以从那里获取
+                'image_url': db_car.car_images, # 直接使用数据库中的 car_images 字段
+                'description': f"{db_car.brand} {db_car.model} 是一款{fuel_type_text}车，配备{transmission_text}变速箱。",
+                'availability': db_car.rental_status == 0,  # rental_status 0 表示可用
+                'color': db_car.color,
+                'mileage': db_car.mileage,
+                'car_number': db_car.car_number, # 车牌号
+                'engine_capacity': db_car.engine_capacity, # 排量
+                'gps_device': db_car.gps_device, # GPS设备
+                'last_maintain_time': db_car.last_maintain_time.isoformat() if db_car.last_maintain_time else None,
+                'next_maintain_mileage': db_car.next_maintain_mileage,
+                'buy_time': db_car.buy_time.isoformat() if db_car.buy_time else None,
+                'car_condition': db_car.car_condition,
+            }
+            cars_for_es_indexing.append(es_car_data)
+
+        # 4. 批量索引到 Elasticsearch
+        if cars_for_es_indexing:
+            bulk_index_cars('cars', cars_for_es_indexing)
+            print(f"Successfully indexed {len(cars_for_es_indexing)} cars to Elasticsearch.")
+        else:
+            print("No cars to index to Elasticsearch based on current DB content.")
+
+# 车辆信息表模型 (需要确保在 sync_cars_to_db_and_es 之前定义)
+class CarInfo(db.Model):
+    __tablename__ = 'car_info'
+
+    car_id = db.Column(db.Integer, primary_key=True)
+    type_id = db.Column(db.Integer, db.ForeignKey('car_type_info.type_id'), nullable=True)
+    car_number = db.Column(db.String(20), nullable=False, unique=True)
+    brand = db.Column(db.String(50))
+    model = db.Column(db.String(50))
+    color = db.Column(db.String(20))
+    buy_time = db.Column(db.Date)
+    mileage = db.Column(db.Integer)
+    rental_status = db.Column(db.SmallInteger) # 使用 SmallInteger 替代 tinyint
+    car_condition = db.Column(db.SmallInteger)
+    transmission_type = db.Column(db.SmallInteger)
+    fuel_type = db.Column(db.SmallInteger)
+    engine_capacity = db.Column(db.String(20))
+    gps_device = db.Column(db.String(50))
+    last_maintain_time = db.Column(db.Date)
+    next_maintain_mileage = db.Column(db.Integer)
+    car_images = db.Column(db.String(1000)) # 存储图片路径或MinIO的key
+
+    # 如果有 car_type_info 表，可以建立关系
+    # car_type = db.relationship('CarTypeInfo', backref=db.backref('cars', lazy=True))
+
+# 车辆类型信息表模型 (如果需要关联)
+class CarTypeInfo(db.Model):
+    __tablename__ = 'car_type_info'
+    type_id = db.Column(db.Integer, primary_key=True)
+    type_name = db.Column(db.String(50), nullable=False)
+    seat_num = db.Column(db.Integer)
+    price_per_day = db.Column(db.Numeric(10, 2)) # 使用 Numeric 对应 decimal
+
 with app.app_context():
     db.create_all()
+    
+    # 初始化MinIO存储桶
+    print("Initializing MinIO...")
+    create_bucket_if_not_exists()
+    
+    # 迁移本地图片到MinIO（仅在首次运行时）
+    local_images_path = os.path.join('car-rental', 'src', 'assets', 'images')
+    if os.path.exists(local_images_path):
+        print("Migrating local images to MinIO...")
+        migration_map = migrate_local_images_to_minio(local_images_path)
+        print(f"Migrated {len(migration_map)} images to MinIO")
+    
+    # 在应用启动时执行一次数据同步
+    # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
+    # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
+    if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
+        print("Car_info table is empty. Attempting to sync data...")
+        print("Attempting to sync data from DB to ES during startup...")
+        sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
+    else:
+        print("Car_info table already contains data. Forcing sync for development.")
+        sync_cars_to_db_and_es()
+
+@app.route('/api/search_cars', methods=['GET'])
+def api_search_cars():
+    query = request.args.get('q', '')
+    
+    # 如果查询为空，返回所有车辆；否则进行搜索
+    if not query.strip():
+        # 返回所有车辆 - 使用通配符查询
+        results = es_search_cars(query_string='*', index_name='cars')
+    else:
+        results = es_search_cars(query_string=query, index_name='cars')
+    
+    # 为每个结果生成MinIO图片URL
+    for car in results:
+        if car.get('image_url'):
+            # 如果image_url是MinIO对象名称，生成访问URL
+            if not car['image_url'].startswith('http'):
+                car['image_url'] = get_public_file_url(car['image_url'])
+    
+    return jsonify(results)
+
+@app.route('/api/upload_car_image', methods=['POST'])
+def upload_car_image():
+    """上传车辆图片到MinIO"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # 检查文件类型
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+    if not ('.' in file.filename and 
+            file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    try:
+        # 上传文件到MinIO
+        object_name = upload_file_data_to_minio(file.stream, file.filename)
+        if object_name:
+            # 生成访问URL
+            file_url = get_public_file_url(object_name)
+            return jsonify({
+                'success': True,
+                'object_name': object_name,
+                'file_url': file_url
+            })
+        else:
+            return jsonify({'error': 'Failed to upload file'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@app.route('/api/get_image_url/<path:object_name>', methods=['GET'])
+def get_image_url(object_name):
+    """获取MinIO中图片的访问URL"""
+    try:
+        # 获取预签名URL（1小时有效期）
+        url = get_file_url(object_name)
+        if url:
+            return jsonify({'url': url})
+        else:
+            return jsonify({'error': 'Failed to generate URL'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Failed to get URL: {str(e)}'}), 500
+
+@app.route('/api/update_car_image', methods=['POST'])
+def update_car_image():
+    """更新车辆图片"""
+    data = request.json
+    car_id = data.get('car_id')
+    new_image_object_name = data.get('image_object_name')
+    
+    if not car_id or not new_image_object_name:
+        return jsonify({'error': 'car_id and image_object_name are required'}), 400
+    
+    try:
+        # 查找车辆记录
+        car = CarInfo.query.get(car_id)
+        if not car:
+            return jsonify({'error': 'Car not found'}), 404
+        
+        # 删除旧图片（如果存在且是MinIO对象）
+        old_image = car.car_images
+        if old_image and not old_image.startswith('http') and old_image.startswith('cars/'):
+            delete_file_from_minio(old_image)
+        
+        # 更新车辆图片字段
+        car.car_images = new_image_object_name
+        db.session.commit()
+        
+        # 重新同步到Elasticsearch
+        sync_cars_to_db_and_es()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Car image updated successfully',
+            'new_image_url': get_public_file_url(new_image_object_name)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update car image: {str(e)}'}), 500
+
+@app.route('/api/check_user', methods=['POST'])
 
 @app.route('/api/check_user', methods=['POST'])
 def check_user():

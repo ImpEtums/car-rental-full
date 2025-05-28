@@ -22,7 +22,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS `car_info`;
 CREATE TABLE `car_info`  (
-  `car_id` int(11) NOT NULL,
+  `car_id` int(11) NOT NULL AUTO_INCREMENT,
   `type_id` int(11) NULL DEFAULT NULL,
   `car_number` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `brand` varchar(50) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
@@ -40,28 +40,43 @@ CREATE TABLE `car_info`  (
   `next_maintain_mileage` int(11) NULL DEFAULT NULL,
   `car_images` varchar(1000) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   PRIMARY KEY (`car_id`) USING BTREE,
-  INDEX `type_id`(`type_id`) USING BTREE
-) ENGINE = MyISAM CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
+  UNIQUE KEY `car_number` (`car_number`) USING BTREE,
+  INDEX `type_id`(`type_id`) USING BTREE,
+  CONSTRAINT `fk_car_info_type_id` FOREIGN KEY (`type_id`) REFERENCES `car_type_info` (`type_id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE = InnoDB CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of car_info
 -- ----------------------------
+INSERT INTO `car_info` VALUES (1, 1, '粤B111AA', '本田', '雅阁', '白色', '2023-01-15', 15000, 0, 1, 2, 1, '1.5L', '内置GPS', '2023-10-01', 25000, 'http://127.0.0.1:9000/car-images/cars/car1.png');
+INSERT INTO `car_info` VALUES (2, 2, '粤B222BB', '本田', '思域', '黑色', '2022-11-20', 22000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-09-15', 32000, 'http://127.0.0.1:9000/car-images/cars/car2.png');
+INSERT INTO `car_info` VALUES (3, 3, '粤B333CC', '丰田', '凯美瑞', '银色', '2023-03-10', 8000, 0, 1, 2, 1, '1.2T', '内置GPS', '2023-11-01', 18000, 'http://127.0.0.1:9000/car-images/cars/car3.png');
+INSERT INTO `car_info` VALUES (4, 4, '粤B444DD', '大众', '帕萨特', '蓝色', '2022-08-01', 35000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-08-01', 45000, 'http://127.0.0.1:9000/car-images/cars/car4.png');
+INSERT INTO `car_info` VALUES (5, 5, '粤B555EE', '现代', '索纳塔', '红色', '2023-05-05', 5000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-12-01', 15000, 'http://127.0.0.1:9000/car-images/cars/car5.png');
+INSERT INTO `car_info` VALUES (6, 6, '粤B666FF', '夺命', '双头车', '灰色', '2023-02-20', 12000, 0, 1, 2, 4, '2.0L混动', '内置GPS', '2023-10-20', 22000, 'http://127.0.0.1:9000/car-images/cars/car6.png');
 
 -- ----------------------------
 -- Table structure for car_type_info
 -- ----------------------------
 DROP TABLE IF EXISTS `car_type_info`;
 CREATE TABLE `car_type_info`  (
-  `type_id` int(11) NOT NULL,
+  `type_id` int(11) NOT NULL AUTO_INCREMENT,
   `type_name` varchar(50) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `seat_num` int(11) NULL DEFAULT NULL,
   `price_per_day` decimal(10, 2) NULL DEFAULT NULL,
+
   PRIMARY KEY (`type_id`) USING BTREE
-) ENGINE = MyISAM CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Records of car_type_info
 -- ----------------------------
+INSERT INTO `car_type_info` VALUES (1, '标准5座轿车', 5, 288.00);
+INSERT INTO `car_type_info` VALUES (2, '豪华5座SUV', 5, 450.00);
+INSERT INTO `car_type_info` VALUES (3, '经济型5座轿车', 5, 180.00);
+INSERT INTO `car_type_info` VALUES (4, '7座MPV', 5, 350.00);
+INSERT INTO `car_type_info` VALUES (5, '敞篷跑车', 5, 600.00);
+INSERT INTO `car_type_info` VALUES (6, '紧凑型SUV', 5, 320.00);
 
 -- ----------------------------
 -- Table structure for city_info
