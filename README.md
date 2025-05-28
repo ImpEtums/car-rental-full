@@ -239,3 +239,30 @@ python app.py
 - 文件上传限制
 
 更多详细信息请参考项目根目录下的 `MINIO_SETUP.md` 文档。
+
+
+### 新增功能与技术点
+
+## 后端 (node-api)：
+
+【新增项目】 独立的 node-api 后端服务项目：
+提供用户注册、登录、个人信息获取等基于 JWT 的认证 API。
+【新增集成】 集成 Winston 日志库，实现控制台和文件日志（logs/combined.log, logs/error.log）记录。
+
+【主要改动文件】
+node-api/app.js 或 server.js：后端入口文件，可能包含数据库连接和中间件配置。
+node-api/config/logger.js：【新增文件】 或 【主要修改文件】，Winston 日志配置。
+node-api/routes/auth.js：【新增文件】 或 【主要修改文件】，处理用户认证相关的 API 路由。
+node-api/routes/user.js：【新增文件】 或 【主要修改文件】，处理用户个人资料相关的 API 路由（如 /api/auth/me）。
+node-api/models/user.js：【新增文件】 或 【主要修改文件】，用户数据模型定义。
+node-api/utils/ 目录下新增了 JWT 或其他辅助工具文件。
+
+## 前端 (car-rental)：
+【新增功能】 完整的用户登录、注册、个人信息展示页面。
+【新增功能】 通过 Vue Router 导航守卫 实现路由鉴权，保护 /profile 等页面。
+【主要改动文件】
+car-rental/src/components/Login.vue：【主要修改文件】，处理用户登录逻辑。
+car-rental/src/components/Register.vue：【主要修改文件】，处理用户注册逻辑。
+car-rental/src/components/Profile.vue：【新增文件】，用于展示用户个人信息。
+car-rental/src/router/index.js：【主要修改文件】，新增路由和导航守卫配置。
+car-rental/src/axios.js：【主要修改文件】，配置 Axios 实例，用于与后端 API 通信。
