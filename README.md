@@ -109,26 +109,54 @@
 ## 项目结构
 
 ```
-├── car-rental/              # Vue.js 前端项目
-│   ├── public/
-│   ├── src/
-│   │   ├── assets/          # 静态资源 (图片、图标等)
-│   │   ├── components/      # Vue 组件
-│   │   ├── router/          # Vue Router 路由配置
-│   │   ├── services/        # API 服务调用
-│   │   ├── App.vue          # 根组件
-│   │   ├── main.js          # Vue 应用入口文件
-│   │   └── axios.js         # Axios 配置文件 (如果使用)
+├── .gitignore
+├── README.md
+├── app.py
+├── car-rental\
 │   ├── .gitignore
-│   ├── index.html           # HTML 入口文件
-│   ├── package.json         # npm 包管理文件
-│   └── vite.config.js       # Vite 配置文件
-├── app.py                   # Python Flask 后端主应用文件
-├── elasticsearch_utils.py   # Elasticsearch 相关工具函数
-├── requirements.txt         # Python 后端依赖列表
-├── car_rent.sql             # MySQL 数据库结构和初始数据脚本
-├── 文档汇总/                  # 项目相关设计文档、图表等
-└── README.md                # 本 README 文件 (项目根目录)
+│   ├── .vscode\
+│   │   └── extensions.json
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public\
+│   │   └── vite.svg
+│   ├── server.js
+│   ├── src\
+│   │   ├── App.vue
+│   │   ├── assets\
+│   │   ├── axios.js
+│   │   ├── components\
+│   │   ├── main.js
+│   │   ├── router\
+│   │   └── services\
+│   └── vite.config.js
+├── car_rent.sql
+├── elasticsearch_utils.py
+├── minio_service\
+│   ├── MINIO_SETUP.md
+│   ├── __init__.py
+│   ├── minio_config.py
+│   └── minio_utils.py
+├── node-api\
+│   ├── app.js
+│   ├── config\
+│   │   ├── db.js
+│   │   └── logger.js
+│   ├── controllers\
+│   │   └── authController.js
+│   ├── middleware\
+│   │   └── authMiddleware.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── routes\
+│   │   └── auth.js
+│   └── utils\
+│       └── jwt.js
+├── requirements.txt
+├── utils\
+│   └── update_bucket_policy.py
+
 ```
 
 ## 技术栈
