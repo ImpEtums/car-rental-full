@@ -65,17 +65,25 @@ def bulk_index_cars(index_name='cars', cars_data=None):
 
 def search_cars(query_string, index_name='cars'):
     """根据查询字符串搜索车辆。"""
-    # 基础的多字段匹配查询
-    # 您可以根据需求构建更复杂的查询，例如使用布尔查询组合多个条件
-    query_body = {
-        "query": {
-            "multi_match": {
-                "query": query_string,
-                "fields": ["name", "brand", "model", "description"], # 搜索这些字段
-                "fuzziness": "AUTO" # 允许一定的拼写错误
+    # 如果查询字符串为空或为通配符，返回所有车辆
+    if not query_string or query_string.strip() == '*':
+        query_body = {
+            "query": {
+                "match_all": {}
             }
         }
-    }
+    else:
+        # 基础的多字段匹配查询
+        query_body = {
+            "query": {
+                "multi_match": {
+                    "query": query_string,
+                    "fields": ["name", "brand", "model", "description"], # 搜索这些字段
+                    "fuzziness": "AUTO" # 允许一定的拼写错误
+                }
+            }
+        }
+    
     print(f"Elasticsearch query body: {query_body}") # 打印查询体
     try:
         response = es.search(index=index_name, body=query_body)
@@ -89,11 +97,15 @@ def search_cars(query_string, index_name='cars'):
 # --- 数据库同步相关函数 ---
 # 以下函数用于将前端的车辆数据同步到数据库，并随后索引到Elasticsearch
 
-def format_car_data_for_db(frontend_car):
+def format_car_data_for_db(frontend_car, minio_object_name=None):
     """将前端车辆数据格式化为符合数据库 car_info 表的结构。"""
     # 注意：这里需要根据 car_info 表的实际字段进行调整
     # 例如，type_id 可能需要从 car_type_info 表查询得到
     # rental_status, car_condition 等字段也需要根据业务逻辑设置初始值
+    
+    # 处理图片路径：优先使用MinIO对象名称，否则使用原始路径
+    image_path = minio_object_name if minio_object_name else frontend_car.get('image')
+    
     return {
         'car_id': frontend_car.get('id'),
         'type_id': None, # 假设需要后续填充或从其他表关联
@@ -111,7 +123,7 @@ def format_car_data_for_db(frontend_car):
         'gps_device': None,
         'last_maintain_time': None,
         'next_maintain_mileage': None,
-        'car_images': frontend_car.get('image') # 存储图片路径或MinIO的key
+        'car_images': image_path # 存储MinIO对象名称或图片路径
     }
 
 def generate_insert_sql(table_name, data_dict):

@@ -12,6 +12,7 @@ const routes = [
   { path: '/payment', name:'payment',component: () => import('../components/PaymentPage.vue') }, //收款页面
   { path: '/city-tree', name: 'CityTree', component: () => import('@/components/CityTreeView.vue') }, //树状结构展示页面
   { path: '/store-search', name: 'StoreSearch', component: () => import('@/components/StoreSearch.vue') },
+  { path: '/car-management', name: 'CarManagement', component: () => import('@/components/CarManagement.vue') }, // 车辆管理页面
 ];
 
 const router = createRouter({

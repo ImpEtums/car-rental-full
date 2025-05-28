@@ -48,12 +48,12 @@ CREATE TABLE `car_info`  (
 -- ----------------------------
 -- Records of car_info
 -- ----------------------------
-INSERT INTO `car_info` VALUES (1, 1, '粤B111AA', '本田', '雅阁', '白色', '2023-01-15', 15000, 0, 1, 2, 1, '1.5L', '内置GPS', '2023-10-01', 25000, '../assets/images/car1.png');
-INSERT INTO `car_info` VALUES (2, 2, '粤B222BB', '本田', '思域', '黑色', '2022-11-20', 22000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-09-15', 32000, '../assets/images/car2.png');
-INSERT INTO `car_info` VALUES (3, 3, '粤B333CC', '丰田', '凯美瑞', '银色', '2023-03-10', 8000, 0, 1, 2, 1, '1.2T', '内置GPS', '2023-11-01', 18000, '../assets/images/car3.png');
-INSERT INTO `car_info` VALUES (4, 4, '粤B444DD', '大众', '帕萨特', '蓝色', '2022-08-01', 35000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-08-01', 45000, '../assets/images/car4.png');
-INSERT INTO `car_info` VALUES (5, 5, '粤B555EE', '现代', '索纳塔', '红色', '2023-05-05', 5000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-12-01', 15000, '../assets/images/car5.png');
-INSERT INTO `car_info` VALUES (6, 6, '粤B666FF', '夺命', '双头车', '灰色', '2023-02-20', 12000, 0, 1, 2, 4, '2.0L混动', '内置GPS', '2023-10-20', 22000, '../assets/images/car6.png');
+INSERT INTO `car_info` VALUES (1, 1, '粤B111AA', '本田', '雅阁', '白色', '2023-01-15', 15000, 0, 1, 2, 1, '1.5L', '内置GPS', '2023-10-01', 25000, 'http://127.0.0.1:9000/car-images/cars/car1.png');
+INSERT INTO `car_info` VALUES (2, 2, '粤B222BB', '本田', '思域', '黑色', '2022-11-20', 22000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-09-15', 32000, 'http://127.0.0.1:9000/car-images/cars/car2.png');
+INSERT INTO `car_info` VALUES (3, 3, '粤B333CC', '丰田', '凯美瑞', '银色', '2023-03-10', 8000, 0, 1, 2, 1, '1.2T', '内置GPS', '2023-11-01', 18000, 'http://127.0.0.1:9000/car-images/cars/car3.png');
+INSERT INTO `car_info` VALUES (4, 4, '粤B444DD', '大众', '帕萨特', '蓝色', '2022-08-01', 35000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-08-01', 45000, 'http://127.0.0.1:9000/car-images/cars/car4.png');
+INSERT INTO `car_info` VALUES (5, 5, '粤B555EE', '现代', '索纳塔', '红色', '2023-05-05', 5000, 0, 1, 2, 1, '2.0T', '内置GPS', '2023-12-01', 15000, 'http://127.0.0.1:9000/car-images/cars/car5.png');
+INSERT INTO `car_info` VALUES (6, 6, '粤B666FF', '夺命', '双头车', '灰色', '2023-02-20', 12000, 0, 1, 2, 4, '2.0L混动', '内置GPS', '2023-10-20', 22000, 'http://127.0.0.1:9000/car-images/cars/car6.png');
 
 -- ----------------------------
 -- Table structure for car_type_info

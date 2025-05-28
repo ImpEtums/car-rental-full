@@ -62,7 +62,7 @@
             ```
     -   **数据初始化:** 首次运行 Flask 后端时，系统会尝试：
         1.  创建必要的数据库表（如果它们不存在）。
-        2.  使用 <mcfile name="app.py" path="c:\Users\DefineNX\Desktop\car-rental-full\app.py"></mcfile> 中 `MOCK_FRONTEND_CARS_DATA` 的示例车辆数据填充 `car_info` 表。
+        2.  通过车辆管理页面或直接向数据库添加车辆数据来填充 `car_info` 表。
         3.  创建一个名为 `cars` 的 Elasticsearch 索引（如果它不存在）。
         4.  将示例车辆数据索引到 Elasticsearch。
         这是一次性设置。如果 `car_info` 表中已有数据，则将跳过此初始同步。
@@ -159,3 +159,83 @@ node server.js
 npm run serve
 
 上面两个启动一个之后访问就行，app.vue还没改，我怕给整个玩坏了
+
+## MinIO 对象存储配置
+
+本项目集成了 MinIO 对象存储服务用于管理车辆图片。以下是安装和配置步骤：
+
+### 1. MinIO 服务器安装
+
+#### Windows 系统
+```powershell
+# 使用 PowerShell 下载 MinIO
+Invoke-WebRequest -Uri "https://dl.min.io/server/minio/release/windows-amd64/minio.exe" -OutFile "minio.exe"
+
+# 创建数据目录
+mkdir C:\minio-data
+
+# 启动 MinIO 服务器
+.\minio.exe server C:\minio-data --console-address ":9001"
+```
+
+#### Unix/Linux 系统
+```bash
+# 使用 wget 下载 MinIO
+wget https://dl.min.io/server/minio/release/linux-amd64/minio
+chmod +x minio
+
+# 创建数据目录
+mkdir ~/minio-data
+
+# 启动 MinIO 服务器
+./minio server ~/minio-data --console-address ":9001"
+```
+
+#### macOS 系统
+```bash
+# 使用 Homebrew 安装（推荐）
+brew install minio/stable/minio
+
+# 或使用 wget 下载
+wget https://dl.min.io/server/minio/release/darwin-amd64/minio
+chmod +x minio
+
+# 创建数据目录并启动
+mkdir ~/minio-data
+./minio server ~/minio-data --console-address ":9001"
+```
+
+### 2. MinIO 控制台访问
+
+启动 MinIO 后，您可以通过以下方式访问：
+
+- **API 地址**: http://localhost:9000
+- **控制台地址**: http://localhost:9001
+- **默认用户名**: minioadmin
+- **默认密码**: minioadmin
+
+### 3. 创建存储桶
+
+1. 访问 MinIO 控制台：http://localhost:9001
+2. 使用默认凭据登录（minioadmin/minioadmin）
+3. 创建名为 `car-images` 的存储桶
+
+### 4. 图片自动同步
+
+项目启动时会自动将现有的车辆图片迁移到 MinIO：
+
+```bash
+# 启动 Flask 后端（会自动触发图片迁移）
+python app.py
+```
+
+### 5. MinIO 配置说明
+
+项目的 MinIO 配置位于 `minio_config.py` 文件中，您可以根据需要修改：
+
+- 服务器地址和端口
+- 访问密钥和秘密密钥
+- 存储桶名称
+- 文件上传限制
+
+更多详细信息请参考项目根目录下的 `MINIO_SETUP.md` 文档。

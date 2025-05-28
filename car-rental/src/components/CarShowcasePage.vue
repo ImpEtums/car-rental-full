@@ -113,68 +113,65 @@ const getIconUrl = (iconName) => {
   return new URL(`../assets/images/icons/${iconName}`, import.meta.url).href
 }
 
-// 初始化时，将静态数据赋值给 originalCars 和 cars
-onMounted(() => {
-  // 模拟从API获取或直接使用静态数据
-  const staticCars = [
-    {
-      id: 1,
-      name: '本田雅阁',
-      image: new URL(`../assets/images/car1.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 358
-    },
-    {
-      id: 2,
-      name: '本田思域',
-      image: new URL(`../assets/images/car2.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 328
-    },
-    {
-      id: 3,
-      name: '丰田凯美瑞',
-      image: new URL(`../assets/images/car3.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 368
-    },
-    {
-      id: 4,
-      name: '大众帕萨特',
-      image: new URL(`../assets/images/car4.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 348
-    },
-    {
-      id: 5,
-      name: '现代索纳塔',
-      image: new URL(`../assets/images/car5.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 338
-    },
-    {
-      id: 6,
-      name: '夺命双头车',
-      image: new URL(`../assets/images/car6.png`, import.meta.url).href,
-      seats: 5,
-      fuelType: '汽油',
-      transmission: '自动',
-      price: 114514
-    },
-  ];
-  originalCars.value = [...staticCars];
-  cars.value = [...staticCars];
+// 初始化时从Elasticsearch获取所有车辆数据
+onMounted(async () => {
+  try {
+    // 从后端API获取所有车辆数据
+    const response = await fetch('http://localhost:5000/api/search_cars?q=');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const allCars = await response.json();
+    
+    // 处理车辆数据，统一图片URL格式
+     const processedCars = allCars.map(mapCarData);
+    
+    originalCars.value = [...processedCars];
+    cars.value = [...processedCars];
+  } catch (error) {
+    console.error('Failed to load cars from Elasticsearch:', error);
+    // 如果加载失败，显示空数组
+    originalCars.value = [];
+    cars.value = [];
+  }
 });
+
+// 提取图片处理逻辑为独立函数
+const processCarImageUrl = (car_from_es) => {
+  let finalImageUrl;
+  
+  if (car_from_es.image_url) {
+    if (car_from_es.image_url.startsWith('http')) {
+      // 如果是完整的HTTP URL（MinIO公共URL），直接使用
+      finalImageUrl = car_from_es.image_url;
+    } else if (car_from_es.image_url.startsWith('cars/')) {
+      // 如果是MinIO对象名称，构建MinIO访问URL
+      finalImageUrl = `http://localhost:9000/car-images/${car_from_es.image_url}`;
+    } else {
+      // 如果是本地路径，提取文件名并构建本地URL
+      const imageName = car_from_es.image_url.split('/').pop();
+      finalImageUrl = new URL(`../assets/images/${imageName}`, import.meta.url).href;
+    }
+  } else {
+    // 使用默认图片
+    finalImageUrl = new URL(`../assets/images/car_404.png`, import.meta.url).href;
+  }
+  
+  return finalImageUrl;
+};
+
+// 将ES数据转换为前端显示格式
+const mapCarData = (car_from_es) => {
+  return {
+    id: car_from_es.id,
+    name: car_from_es.name,
+    image: processCarImageUrl(car_from_es),
+    seats: car_from_es.seats,
+    fuelType: car_from_es.fuel_type,
+    transmission: car_from_es.transmission,
+    price: car_from_es.price_per_day
+  };
+};
 
 const performSearch = async () => {
   if (!searchQuery.value.trim()) {
@@ -182,34 +179,20 @@ const performSearch = async () => {
     return;
   }
   
-    // 注意：这里的URL需要根据你的实际后端API地址进行调整
+  try {
     const response = await fetch(`http://localhost:5000/api/search_cars?q=${encodeURIComponent(searchQuery.value)}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const searchResults = await response.json();
-    console.log('Raw search results from ES:', searchResults); // 新增日志
-    // 将搜索结果更新到 cars ref
-    // ES 返回的数据结构可能与前端静态数据结构略有不同，需要适配
-    cars.value = searchResults.map(car_from_es => {
-      console.log('Processing car_from_es:', car_from_es); // 新增日志
-      console.log('car_from_es.image_url:', car_from_es.image_url); // 新增日志
-      const imageName = car_from_es.image_url ? car_from_es.image_url.split('/').pop() : 'default.png'; // 处理 image_url 可能为空的情况
-      console.log('Extracted image name:', imageName); // 新增日志
-      const finalImageUrl = new URL(`../assets/images/${imageName}`, import.meta.url).href;
-      console.log('Final image URL for template:', finalImageUrl); // 新增日志
-      return {
-        id: car_from_es.id,
-        name: car_from_es.name,
-        image: finalImageUrl,
-        seats: car_from_es.seats,
-        fuelType: car_from_es.fuel_type,
-        transmission: car_from_es.transmission,
-        price: car_from_es.price_per_day
-      };
-    });
-    console.log('Mapped cars for display:', cars.value); // 新增日志
-  };
+    
+    // 将搜索结果转换为前端显示格式
+    cars.value = searchResults.map(mapCarData);
+  } catch (error) {
+    console.error('Search failed:', error);
+    // 搜索失败时保持当前显示
+  }
+};
 
 const handleCarClick = (car) => {
   router.push({
