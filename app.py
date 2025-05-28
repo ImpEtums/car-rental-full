@@ -18,6 +18,9 @@ from minio_service.minio_utils import (
     create_bucket_if_not_exists
 )
 
+# 导入WebService中间件
+from webservice_middleware.webservice_middleware import webservice_support, soap_webservice_support
+
 # 创建 Flask 应用
 app = Flask(__name__)
 
@@ -28,7 +31,7 @@ app.config['SECRET_KEY'] = 'your_secret_key'  # 请更换成更安全的密钥
 CORS(app, origins="http://localhost:5173", supports_credentials=True)  # 支持携带凭证
 
 # 配置数据库连接
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:1128@localhost/car_rental'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/car_rental'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪
 
 # 初始化 SQLAlchemy
@@ -202,34 +205,14 @@ class CarTypeInfo(db.Model):
     type_id = db.Column(db.Integer, primary_key=True)
     type_name = db.Column(db.String(50), nullable=False)
     seat_num = db.Column(db.Integer)
+
     price_per_day = db.Column(db.Numeric(10, 2)) # 使用 Numeric 对应 decimal
 
-with app.app_context():
-    db.create_all()
-    
-    # 初始化MinIO存储桶
-    print("Initializing MinIO...")
-    create_bucket_if_not_exists()
-    
-    # 迁移本地图片到MinIO（仅在首次运行时）
-    local_images_path = os.path.join('car-rental', 'src', 'assets', 'images')
-    if os.path.exists(local_images_path):
-        print("Migrating local images to MinIO...")
-        migration_map = migrate_local_images_to_minio(local_images_path)
-        print(f"Migrated {len(migration_map)} images to MinIO")
-    
-    # 在应用启动时执行一次数据同步
-    # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
-    # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
-    if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
-        print("Car_info table is empty. Attempting to sync data...")
-        print("Attempting to sync data from DB to ES during startup...")
-        sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
-    else:
-        print("Car_info table already contains data. Forcing sync for development.")
-        sync_cars_to_db_and_es()
+# 数据库和服务初始化将在主程序启动时执行
 
+# 新的WebService支持路由
 @app.route('/api/search_cars', methods=['GET'])
+@webservice_support
 def api_search_cars():
     query = request.args.get('q', '')
     
@@ -249,7 +232,10 @@ def api_search_cars():
     
     return jsonify(results)
 
+
+# 新的WebService支持路由
 @app.route('/api/upload_car_image', methods=['POST'])
+@webservice_support
 def upload_car_image():
     """上传车辆图片到MinIO"""
     if 'file' not in request.files:
@@ -281,7 +267,9 @@ def upload_car_image():
     except Exception as e:
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
+# 新的WebService支持路由
 @app.route('/api/get_image_url/<path:object_name>', methods=['GET'])
+@webservice_support
 def get_image_url(object_name):
     """获取MinIO中图片的访问URL"""
     try:
@@ -294,7 +282,10 @@ def get_image_url(object_name):
     except Exception as e:
         return jsonify({'error': f'Failed to get URL: {str(e)}'}), 500
 
+
+# 新的WebService支持路由
 @app.route('/api/update_car_image', methods=['POST'])
+@webservice_support
 def update_car_image():
     """更新车辆图片"""
     data = request.json
@@ -359,7 +350,10 @@ def check_user():
 
     return jsonify({'message': '验证通过'}), 200
 
+
+# 新的WebService支持路由
 @app.route('/api/register_user', methods=['POST'])
+@webservice_support
 def register_user():
     data = request.json
     username = data['username']
@@ -399,7 +393,9 @@ def register_user():
     return jsonify({'success': True}), 201
 
 
+# 新的WebService支持路由
 @app.route('/api/login', methods=['POST'])
+@webservice_support
 def login_user():
     data = request.get_json()
     username = data.get('username')
@@ -440,7 +436,9 @@ def login_user():
         return jsonify({"message": "该用户不存在，请检查用户名", "status": "error"}), 404
 
 
+# 新的WebService支持路由
 @app.route('/api/get_user_info', methods=['GET'])
+@webservice_support
 def get_user_info():
     user_id = session.get('user_id')
     if not user_id:
@@ -464,7 +462,10 @@ def get_user_info():
     else:
         return jsonify({"message": "用户不存在", "status": "error"}), 404
 
+
+# 新的WebService支持路由
 @app.route('/api/update_user_info', methods=['PUT'])
+@webservice_support
 def update_user_info():
     user_id = session.get('user_id')
     if not user_id:
@@ -512,7 +513,10 @@ def update_user_info():
             "message": "更新失败：" + str(e)
         }), 500
 
+
+# 新的WebService支持路由
 @app.route('/api/logout', methods=['POST'])
+@webservice_support
 def logout():
     session.clear()
     return jsonify({
@@ -646,4 +650,32 @@ def get_hot_cities():
         }), 500
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        
+        # 初始化MinIO存储桶
+        print("Initializing MinIO...")
+        create_bucket_if_not_exists()
+        
+        # 迁移本地图片到MinIO（仅在首次运行时）
+        local_images_path = os.path.join('car-rental', 'src', 'assets', 'images')
+        if os.path.exists(local_images_path):
+            print("Migrating local images to MinIO...")
+            migration_map = migrate_local_images_to_minio(local_images_path)
+            print(f"Migrated {len(migration_map)} images to MinIO")
+        
+        # 创建Elasticsearch索引
+        create_index_if_not_exists()
+        
+        # 在应用启动时执行一次数据同步
+        # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
+        # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
+        if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
+            print("Car_info table is empty. Attempting to sync data...")
+            print("Attempting to sync data from DB to ES during startup...")
+            sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
+        else:
+            print("Car_info table already contains data. Forcing sync for development.")
+            sync_cars_to_db_and_es()
+    
     app.run(debug=True)
