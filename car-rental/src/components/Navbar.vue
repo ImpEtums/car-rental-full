@@ -14,8 +14,15 @@
       <li>
         <router-link to="/store-search" :class="{ active: isActive('/store-search') }">网点查询</router-link>
       </li>
+      <!-- 添加订单管理链接 -->
+      <li v-if="isLoggedIn">
+        <router-link to="/orders" :class="{ active: isActive('/orders') }">我的订单</router-link>
+      </li>
       <li>
         <router-link to="/city-tree" :class="{ active: isActive('/city-tree') }">城市树状图</router-link>
+      </li>
+      <li>
+        <router-link to="/car-show-3d" :class="{ active: isActive('/car-show-3d') }">热门车型</router-link>
       </li>
       <li>
         <a href="tel:666666666" class="phone-button">🕿 666-666-666</a>
@@ -23,7 +30,7 @@
     </ul>
 
     <div class="auth-buttons">
-      <router-link to="/login" class="auth-button">
+      <router-link :to="isLoggedIn ? '/profile' : '/login'" class="auth-button">
         {{ isLoggedIn ? '个人中心' : '登录/注册' }}
       </router-link>
     </div>
@@ -42,16 +49,20 @@ const isActive = (path) => {
   return route.path === path;
 };
 
-onMounted(() => {
-  isLoggedIn.value = !!localStorage.getItem('user');
-});
-
+// 在script setup部分
 watch(
   () => route.path,
   () => {
-    isLoggedIn.value = !!localStorage.getItem('user');
+    // 检查所有可能的token键名
+    const token = localStorage.getItem('token') || localStorage.getItem('jwt_token');
+    isLoggedIn.value = !!token;
   }
 );
+
+onMounted(() => {
+  const token = localStorage.getItem('token') || localStorage.getItem('jwt_token');
+  isLoggedIn.value = !!token;
+});
 </script>
 
 <style scoped>

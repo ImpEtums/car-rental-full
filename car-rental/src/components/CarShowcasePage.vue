@@ -102,12 +102,167 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import { flaskApiService } from '@/axios'
 
 const router = useRouter()
+const route = useRoute()
 const searchQuery = ref('')
 const originalCars = ref([]) // 保存原始车辆数据用于重置或无搜索时显示
 const cars = ref([]) // 用于展示的车辆数据，会根据搜索结果更新
+
+// 租车信息
+const rentalInfo = {
+  pickupLocation: route.query.pickupLocation || '',
+  returnLocation: route.query.returnLocation || '',
+  pickupDate: route.query.pickupDate || '',
+  returnDate: route.query.returnDate || '',
+  pickupTime: route.query.pickupTime || '',
+  returnTime: route.query.returnTime || '',
+  pickupStationId: route.query.pickupStationId || '',
+  returnStationId: route.query.returnStationId || '',
+  isDifferentLocation: route.query.isDifferentLocation === 'true'
+}
+
+// 添加模拟车辆数据作为后备方案
+// 更新模拟车辆数据，使用真实的车辆图片
+const mockCarData = [
+  {
+    id: 1,
+    name: '大众朗逸 2023款',
+    image: new URL('../assets/images/car1.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 150
+  },
+  {
+    id: 2,
+    name: '丰田卡罗拉 2023款',
+    image: new URL('../assets/images/car2.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 160
+  },
+  {
+    id: 3,
+    name: '本田雅阁 2023款',
+    image: new URL('../assets/images/car3.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 200
+  },
+  {
+    id: 4,
+    name: '日产轩逸 2023款',
+    image: new URL('../assets/images/car4.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 140
+  },
+  {
+    id: 5,
+    name: '别克英朗 2023款',
+    image: new URL('../assets/images/car5.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 170
+  },
+  {
+    id: 6,
+    name: '现代伊兰特 2023款',
+    image: new URL('../assets/images/car6.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 145
+  },
+  {
+    id: 7,
+    name: '大众途观L 2023款',
+    image: new URL('../assets/images/car-1.png', import.meta.url).href,
+    seats: 7,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 280
+  },
+  {
+    id: 8,
+    name: '丰田汉兰达 2023款',
+    image: new URL('../assets/images/car-2.png', import.meta.url).href,
+    seats: 7,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 320
+  },
+  {
+    id: 9,
+    name: '奔驰C级 2023款',
+    image: new URL('../assets/images/car-3.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 450
+  },
+  {
+    id: 10,
+    name: '宝马3系 2023款',
+    image: new URL('../assets/images/c1.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 480
+  },
+  {
+    id: 11,
+    name: '奥迪A4L 2023款',
+    image: new URL('../assets/images/c2.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 460
+  },
+  {
+    id: 12,
+    name: '比亚迪秦PLUS DM-i',
+    image: new URL('../assets/images/c3.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '混动',
+    transmission: '自动',
+    price: 180
+  },
+  {
+    id: 13,
+    name: '特斯拉Model 3',
+    image: new URL('../assets/images/c4.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '电动',
+    transmission: '自动',
+    price: 350
+  },
+  {
+    id: 14,
+    name: '凯迪拉克CT5',
+    image: new URL('../assets/images/card-1.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 380
+  },
+  {
+    id: 15,
+    name: '雷克萨斯ES',
+    image: new URL('../assets/images/card-2.png', import.meta.url).href,
+    seats: 5,
+    fuelType: '汽油',
+    transmission: '自动',
+    price: 420
+  }
+];
 
 const getIconUrl = (iconName) => {
   return new URL(`../assets/images/icons/${iconName}`, import.meta.url).href
@@ -116,25 +271,65 @@ const getIconUrl = (iconName) => {
 // 初始化时从Elasticsearch获取所有车辆数据
 onMounted(async () => {
   try {
-    // 从后端API获取所有车辆数据
-    const response = await fetch('http://localhost:5000/api/search_cars?q=');
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    console.log('开始加载车辆数据...');
+    // 修复：移除多余的 /api 前缀，因为 flaskApiService 已经配置了 baseURL: '/api'
+    const response = await flaskApiService.get('/search_cars?q=');
+    console.log('API响应:', response);
+    const allCars = response.data;
+    
+    if (!allCars || allCars.length === 0) {
+      console.warn('API没有返回车辆数据，使用模拟数据');
+      // 使用模拟数据
+      originalCars.value = [...mockCarData];
+      cars.value = [...mockCarData];
+      console.log('已加载模拟车辆数据，共', cars.value.length, '辆车');
+      return;
     }
-    const allCars = await response.json();
     
     // 处理车辆数据，统一图片URL格式
-     const processedCars = allCars.map(mapCarData);
+    const processedCars = allCars.map(mapCarData);
+    console.log('处理后的车辆数据:', processedCars);
     
     originalCars.value = [...processedCars];
     cars.value = [...processedCars];
+    console.log('车辆数据加载完成，共', cars.value.length, '辆车');
   } catch (error) {
     console.error('Failed to load cars from Elasticsearch:', error);
-    // 如果加载失败，显示空数组
-    originalCars.value = [];
-    cars.value = [];
+    console.error('错误详情:', error.response || error.message);
+    // 如果API调用失败，使用模拟数据
+    console.log('API调用失败，使用模拟数据');
+    originalCars.value = [...mockCarData];
+    cars.value = [...mockCarData];
+    console.log('已加载模拟车辆数据，共', cars.value.length, '辆车');
   }
 });
+
+// 搜索功能
+const performSearch = async () => {
+  if (!searchQuery.value.trim()) {
+    // 如果搜索为空，显示所有车辆
+    cars.value = [...originalCars.value];
+    return;
+  }
+  
+  try {
+    // 修复：移除多余的 /api 前缀
+    const response = await flaskApiService.get(`/search_cars?q=${encodeURIComponent(searchQuery.value)}`);
+    
+    // 将搜索结果转换为前端显示格式
+    cars.value = response.data.map(mapCarData);
+  } catch (error) {
+    console.error('搜索失败:', error);
+    // 搜索失败时在模拟数据中进行本地搜索
+    const query = searchQuery.value.toLowerCase();
+    cars.value = mockCarData.filter(car => 
+      car.name.toLowerCase().includes(query) ||
+      car.fuelType.toLowerCase().includes(query) ||
+      car.transmission.toLowerCase().includes(query)
+    );
+    console.log('使用模拟数据进行本地搜索，找到', cars.value.length, '辆车');
+  }
+};
 
 // 提取图片处理逻辑为独立函数
 const processCarImageUrl = (car_from_es) => {
@@ -173,40 +368,34 @@ const mapCarData = (car_from_es) => {
   };
 };
 
-const performSearch = async () => {
-  if (!searchQuery.value.trim()) {
-    cars.value = [...originalCars.value]; // 如果搜索词为空，显示所有车辆
-    return;
-  }
-  
-  try {
-    const response = await fetch(`http://localhost:5000/api/search_cars?q=${encodeURIComponent(searchQuery.value)}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const searchResults = await response.json();
-    
-    // 将搜索结果转换为前端显示格式
-    cars.value = searchResults.map(mapCarData);
-  } catch (error) {
-    console.error('Search failed:', error);
-    // 搜索失败时保持当前显示
-  }
-};
-
+// 修改 handleCarClick 方法
 const handleCarClick = (car) => {
+  // 记录车辆浏览
+  recordCarView(car.id)
+  
+  // 导航到结账页面，传递完整的汽车信息
   router.push({
     name: 'checkout',
     params: { id: car.id },
     query: {
+      car_id: car.id,
       name: car.name,
       price: car.price,
       seats: car.seats,
-      fuelType: car.fuelType,
       transmission: car.transmission,
-      image: car.image
+      image: car.image  // 关键是传递图片URL
     }
   })
+}
+
+// 添加记录浏览的方法
+const recordCarView = async (carId) => {
+  try {
+    await flaskApiService.post('/rankings/car-view', { carId })
+    console.log('浏览记录已保存到Redis')
+  } catch (error) {
+    console.error('记录浏览失败:', error)
+  }
 }
 </script>
 

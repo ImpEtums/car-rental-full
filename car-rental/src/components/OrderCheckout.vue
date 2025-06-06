@@ -30,21 +30,75 @@
           <!-- 个人信息 -->
           <div class="personal-info">
             <h3>个人信息</h3>
-            <div class="spec-item">
-              <span class="label">姓名：</span>
-              <span>{{ userInfo.real_name || '未填写' }}</span>
+            
+            <!-- 显示模式 -->
+            <div v-if="!isEditingPersonalInfo" class="info-display">
+              <div class="info-item">
+                <span class="label">姓名：</span>
+                <span class="value">{{ userInfo.real_name || '未填写' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">手机号：</span>
+                <span class="value">{{ userInfo.phone || '未填写' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">身份证号：</span>
+                <span class="value">{{ userInfo.id_number || '未填写' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">邮箱：</span>
+                <span class="value">{{ userInfo.email || '未填写' }}</span>
+              </div>
+              <button type="button" @click="startEditPersonalInfo" class="edit-info-btn">
+                {{ hasCompleteInfo ? '修改信息' : '完善信息' }}
+              </button>
             </div>
-            <div class="spec-item">
-              <span class="label">手机号：</span>
-              <span>{{ userInfo.phone || '未填写' }}</span>
-            </div>
-            <div class="spec-item">
-              <span class="label">身份证号：</span>
-              <span>{{ userInfo.id_number || '未填写' }}</span>
-            </div>
-            <div class="spec-item">
-              <span class="label">邮箱：</span>
-              <span>{{ userInfo.email || '未填写' }}</span>
+            
+            <!-- 编辑模式 -->
+            <div v-else class="info-edit">
+              <div class="form-group">
+                <label>姓名：</label>
+                <input 
+                  type="text" 
+                  v-model="editingUserInfo.real_name" 
+                  placeholder="请输入真实姓名"
+                  class="form-input"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label>手机号：</label>
+                <input 
+                  type="tel" 
+                  v-model="editingUserInfo.phone" 
+                  placeholder="请输入手机号码"
+                  class="form-input"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label>身份证号：</label>
+                <input 
+                  type="text" 
+                  v-model="editingUserInfo.id_number" 
+                  placeholder="请输入身份证号码"
+                  class="form-input"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label>邮箱：</label>
+                <input 
+                  type="email" 
+                  v-model="editingUserInfo.email" 
+                  placeholder="请输入邮箱地址"
+                  class="form-input"
+                />
+              </div>
+              <div class="button-group">
+                <button type="button" @click="saveUserInfo" class="save-info-btn">保存</button>
+                <button type="button" @click="cancelEditPersonalInfo" class="cancel-info-btn">取消</button>
+              </div>
             </div>
           </div>
           <div class="rental-trend-chart">
@@ -63,16 +117,16 @@
               <img src="../assets/images/icons/location.png" alt="location" class="location-icon" />
               <div class="info">
                 <div class="type">取车地点</div>
-                <div class="value">浙江省杭州市西湖区武林门店</div>
-                <div class="time">2024-12-21 08:00</div>
+                <div class="value">{{ rentalInfo.pickupLocation }}</div>
+                <div class="time">{{ formatDateTime(rentalInfo.pickupTime) }}</div>
               </div>
             </div>
             <div class="location-item">
               <img src="../assets/images/icons/location.png" alt="location" class="location-icon" />
               <div class="info">
                 <div class="type">还车地点</div>
-                <div class="value">浙江省杭州市西湖区西湖风景区店</div>
-                <div class="time">2024-12-25 20:00</div>
+                <div class="value">{{ rentalInfo.returnLocation }}</div>
+                <div class="time">{{ formatDateTime(rentalInfo.returnTime) }}</div>
               </div>
             </div>
           </div>
@@ -183,6 +237,7 @@ const router = useRouter()
 
 // 从路由参数获取车辆数据
 const carData = ref({
+  car_id: Number(route.query.car_id) || Number(route.params.id) || 1,
   name: route.query.name || '',
   price: Number(route.query.price) || 0,
   seats: route.query.seats || 5,
@@ -190,10 +245,34 @@ const carData = ref({
   image: route.query.image || ''
 })
 
-// 车辆租赁天数
-const rentalDays = computed(() => {
-  return 3  // 目前写死为3天
+// 从路由参数获取租车信息
+const rentalInfo = ref({
+  pickupLocation: route.query.pickupLocation || '浙江省杭州市西湖区武林门店',
+  returnLocation: route.query.returnLocation || '浙江省杭州市西湖区西湖风景区店',
+  pickupTime: route.query.pickupTime ? new Date(Number(route.query.pickupTime)) : new Date(),
+  returnTime: route.query.returnTime ? new Date(Number(route.query.returnTime)) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+  pickupStationId: route.query.pickupStationId || 301,
+  returnStationId: route.query.returnStationId || 302
 })
+
+// 根据实际选择的时间计算租赁天数
+const rentalDays = computed(() => {
+  const diffTime = rentalInfo.value.returnTime.getTime() - rentalInfo.value.pickupTime.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return Math.max(1, diffDays) // 至少1天
+})
+
+// 格式化日期时间显示
+const formatDateTime = (date) => {
+  if (!date) return ''
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 // 计算车辆租金
 const rentalFee = computed(() => {
@@ -238,9 +317,74 @@ const selectPayment = (method) => {
   selectedPayment.value = method
 }
 
-// 提交订单
-const handleSubmit = () => {
-  router.push('/payment')
+// 修改提交订单方法
+const handleSubmit = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('请先登录');
+      router.push('/login');
+      return;
+    }
+
+    // 验证必要信息
+    if (!userInfo.value.real_name || !userInfo.value.phone || !userInfo.value.id_number) {
+      alert('请先完善个人信息（姓名、手机号、身份证号）')
+      startEditPersonalInfo()
+      return
+    }
+    
+    if (!selectedPayment.value) {
+      alert('请选择支付方式')
+      return
+    }
+    
+    // 准备订单数据
+    const orderData = {
+      car_id: carData.value.car_id || 1,
+      pickup_store_id: rentalInfo.value.pickupStationId,
+      return_store_id: rentalInfo.value.returnStationId,
+      start_time: rentalInfo.value.pickupTime.toISOString(),
+      end_time: rentalInfo.value.returnTime.toISOString(),
+      rental_days: rentalDays.value,
+      total_amount: totalPrice.value,
+      deposit: 150.00,
+      coupon_id: selectedCoupon.value || null,
+      discount_amount: discountAmount.value,
+      insurance_type: selectedInsurance.value,
+      payment_method: selectedPayment.value
+    }
+    
+    // 调用Flask后端的创建订单API，添加JWT认证
+    const response = await fetch('/api/create_order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(orderData)
+    })
+    
+    if (response.status === 401) {
+      alert('登录已过期，请重新登录');
+      localStorage.removeItem('token');
+      router.push('/login');
+      return;
+    }
+
+    const result = await response.json()
+    
+    if (result.status === 'success') {
+      alert('订单创建成功！')
+      router.push('/orders')
+    } else {
+      alert('订单创建失败: ' + result.message)
+    }
+    
+  } catch (error) {
+    console.error('创建订单失败:', error)
+    alert('创建订单失败，请稍后重试')
+  }
 }
 
 // 添加用户信息状态
@@ -249,17 +393,45 @@ const userInfo = ref({})
 // 获取用户信息的函数
 const fetchUserInfo = async () => {
   try {
-    const response = await fetch('http://localhost:5000/api/get_user_info', {
-      credentials: 'include'
-    })
-    const data = await response.json()
-    if (data.status === 'success') {
-      userInfo.value = data.user
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('未找到登录token');
+      alert('请先登录');
+      router.push('/login');
+      return;
+    }
+
+    const response = await fetch('/api/get_user_info', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (response.status === 401) {
+      console.log('认证失败，可能是token过期');
+      alert('登录已过期，请重新登录');
+      localStorage.removeItem('token');
+      router.push('/login');
+      return;
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success') {
+        userInfo.value = data.user_info;
+        console.log('用户信息获取成功:', userInfo.value);
+      } else {
+        console.error('获取用户信息失败:', data.message);
+        alert('获取用户信息失败: ' + data.message);
+      }
     } else {
-      console.error('获取用户信息失败:', data.message)
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
   } catch (error) {
-    console.error('获取用户信息出错:', error)
+    console.error('网络错误:', error);
+    alert('网络连接失败，请检查网络连接');
   }
 }
 // 新增的图表相关代码
@@ -335,10 +507,87 @@ const initChart = () => {
 }
 
 // 在组件挂载时初始化图表
-onMounted(() => {
-  fetchUserInfo()
+onMounted(async () => {
+  await fetchUserInfo()
+  
+  // 如果用户信息不完整，自动进入编辑模式
+  if (!hasCompleteInfo.value) {
+    startEditPersonalInfo()
+  }
+  
   initChart()
 })
+
+// 保存用户信息的函数
+// 个人信息编辑状态
+const isEditingPersonalInfo = ref(false)
+const editingUserInfo = ref({})
+
+// 检查是否有完整的个人信息
+const hasCompleteInfo = computed(() => {
+  return userInfo.value.real_name && 
+         userInfo.value.phone && 
+         userInfo.value.id_number && 
+         userInfo.value.email
+})
+
+// 开始编辑个人信息
+const startEditPersonalInfo = () => {
+  // 复制当前用户信息到编辑对象
+  editingUserInfo.value = {
+    real_name: userInfo.value.real_name || '',
+    phone: userInfo.value.phone || '',
+    id_number: userInfo.value.id_number || '',
+    email: userInfo.value.email || ''
+  }
+  isEditingPersonalInfo.value = true
+}
+
+// 取消编辑个人信息
+const cancelEditPersonalInfo = () => {
+  isEditingPersonalInfo.value = false
+  editingUserInfo.value = {}
+}
+
+// 保存用户信息的函数
+const saveUserInfo = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('请先登录');
+      router.push('/login');
+      return;
+    }
+
+    const response = await fetch('/api/update_user_info', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(editingUserInfo.value)
+    });
+
+    if (response.status === 401) {
+      alert('登录已过期，请重新登录');
+      localStorage.removeItem('token');
+      router.push('/login');
+      return;
+    }
+
+    const result = await response.json();
+    if (result.status === 'success') {
+      userInfo.value = { ...editingUserInfo.value };
+      isEditingPersonalInfo.value = false;
+      alert('个人信息保存成功');
+    } else {
+      alert('保存失败: ' + result.message);
+    }
+  } catch (error) {
+    console.error('保存用户信息失败:', error);
+    alert('保存失败，请稍后重试');
+  }
+}
 </script>
 
 <style scoped>
@@ -641,5 +890,249 @@ onMounted(() => {
   margin-bottom: 15px;
   font-size: 1.1em;
 }
-</style>
+/* 个人信息区域样式 */
+.personal-info {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
 
+.personal-info h3 {
+  margin-bottom: 20px;
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* 信息显示模式样式 */
+.personal-info .info-display .info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.personal-info .info-display .info-item:last-child {
+  border-bottom: none;
+}
+
+.personal-info .info-display .label {
+  font-weight: 500;
+  color: #495057;
+  min-width: 80px;
+}
+
+.personal-info .info-display .value {
+  color: #6c757d;
+  flex: 1;
+  text-align: right;
+}
+
+/* 完善信息/修改信息按钮样式 */
+.edit-info-btn {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 20px;
+  width: 100%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.edit-info-btn:hover {
+  background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.edit-info-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 123, 255, 0.3);
+}
+
+.edit-info-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.edit-info-btn:hover::before {
+  left: 100%;
+}
+
+/* 编辑模式表单样式 */
+.personal-info .info-edit .form-group {
+  margin-bottom: 20px;
+}
+
+.personal-info .info-edit .form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+}
+
+.personal-info .info-edit .form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  background-color: white;
+}
+
+.personal-info .info-edit .form-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  background-color: #f8f9ff;
+}
+
+.personal-info .info-edit .form-input:hover {
+  border-color: #ced4da;
+}
+
+/* 按钮组样式 */
+.personal-info .button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 25px;
+}
+
+/* 保存按钮样式 */
+.save-info-btn {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.save-info-btn:hover {
+  background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.save-info-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+}
+
+.save-info-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.save-info-btn:hover::before {
+  left: 100%;
+}
+
+/* 取消按钮样式 */
+.cancel-info-btn {
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.cancel-info-btn:hover {
+  background: linear-gradient(135deg, #545b62 0%, #343a40 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+}
+
+.cancel-info-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
+}
+
+.cancel-info-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.cancel-info-btn:hover::before {
+  left: 100%;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .personal-info .button-group {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .save-info-btn,
+  .cancel-info-btn {
+    width: 100%;
+  }
+  
+  .edit-info-btn {
+    font-size: 16px;
+    padding: 14px 24px;
+  }
+}
+
+/* 按钮禁用状态 */
+.save-info-btn:disabled,
+.cancel-info-btn:disabled,
+.edit-info-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.save-info-btn:disabled:hover,
+.cancel-info-btn:disabled:hover,
+.edit-info-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+</style>

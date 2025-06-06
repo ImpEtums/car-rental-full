@@ -1,0 +1,26 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+.DS_Store
+# 添加以下规则
+car-rental/node_modules
+*/node_modules
+**/node_modules
+.vscode
+*.log
+*.tmp
+*.temp
+dist
+build
+coverage
+.nyc_output

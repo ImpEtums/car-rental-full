@@ -192,6 +192,7 @@ import Hero from '../components/Hero.vue';
 import CarRentalSelector from '../components/CarRentalSelector.vue';
 import { useRouter } from 'vue-router';
 import Highcharts from 'highcharts';
+import { flaskApiService } from '../axios.js'; // 导入Flask API服务
 
 import car1 from '../assets/images/car1.png';
 import car2 from '../assets/images/car2.png';
@@ -217,90 +218,148 @@ export default {
       });
     };
 
-    // 初始化各城市网点数量图表
-    const initCityBranchChart = () => {
-      const cityNames = ['上海', '浙江', '北京', '广州', '深圳'];
-      const branchCounts = [10, 15, 8, 12, 9]; // 示例网点个数
+    // 从Redis获取城市网点数据并初始化图表
+    const initCityBranchChart = async () => {
+      try {
+        const response = await flaskApiService.get('/api/redis/city-branches');
+        const data = response.data;
+        
+        if (data.status === 'success') {
+          const cityNames = Object.keys(data.data);
+          const branchCounts = Object.values(data.data);
 
-      Highcharts.chart('city-branch-chart', {
-        chart: {
-          type: 'column'
-        },
-        title: {
-          text: null
-        },
-        xAxis: {
-          categories: cityNames,
-          crosshair: true
-        },
-        yAxis: {
-          min: 0,
-          title: {
-            text: '网点个数'
-          }
-        },
-        tooltip: {
-          headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
-          pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
-            '<td style="padding:0"><b>{point.y} 个</b></td></tr>',
-          footerFormat: '</table>',
-          shared: true,
-          useHTML: true
-        },
-        plotOptions: {
-          column: {
-            pointPadding: 0.2,
-            borderWidth: 0
-          }
-        },
-        series: [{
-          name: '网点个数',
-          data: branchCounts
-        }]
-      });
+          Highcharts.chart('city-branch-chart', {
+            chart: {
+              type: 'column'
+            },
+            title: {
+              text: null
+            },
+            xAxis: {
+              categories: cityNames,
+              crosshair: true
+            },
+            yAxis: {
+              min: 0,
+              title: {
+                text: '网点个数'
+              }
+            },
+            tooltip: {
+              headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
+              pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
+                '<td style="padding:0"><b>{point.y} 个</b></td></tr>',
+              footerFormat: '</table>',
+              shared: true,
+              useHTML: true
+            },
+            plotOptions: {
+              column: {
+                pointPadding: 0.2,
+                borderWidth: 0
+              }
+            },
+            series: [{
+              name: '网点个数',
+              data: branchCounts
+            }]
+          });
+        }
+      } catch (error) {
+        console.error('获取城市网点数据失败:', error);
+        // 如果Redis数据获取失败，使用默认数据
+        const cityNames = ['上海', '浙江', '北京', '广州', '深圳'];
+        const branchCounts = [10, 15, 8, 12, 9];
+        
+        Highcharts.chart('city-branch-chart', {
+          chart: { type: 'column' },
+          title: { text: null },
+          xAxis: { categories: cityNames, crosshair: true },
+          yAxis: { min: 0, title: { text: '网点个数' } },
+          tooltip: {
+            headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
+            pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
+              '<td style="padding:0"><b>{point.y} 个</b></td></tr>',
+            footerFormat: '</table>',
+            shared: true,
+            useHTML: true
+          },
+          plotOptions: { column: { pointPadding: 0.2, borderWidth: 0 } },
+          series: [{ name: '网点个数', data: branchCounts }]
+        });
+      }
     };
 
-    // 初始化昨日车辆租赁成交次数图表
-    const initVehicleRentalChart = () => {
-      const vehicleNames = ['本田雅阁', '本田思域', '丰田凯美瑞', '大众帕萨特', '现代索纳塔'];
-      const rentalCounts = [20, 18, 22, 8, 6]; // 精选车辆的成交次数大于另外两辆车
+    // 从Redis获取车辆租赁数据并初始化图表
+    const initVehicleRentalChart = async () => {
+      try {
+        const response = await flaskApiService.get('/api/redis/vehicle-rentals');
+        const data = response.data;
+        
+        if (data.status === 'success') {
+          const vehicleNames = Object.keys(data.data);
+          const rentalCounts = Object.values(data.data);
 
-      Highcharts.chart('vehicle-rental-chart', {
-        chart: {
-          type: 'column'
-        },
-        title: {
-          text: null
-        },
-        xAxis: {
-          categories: vehicleNames,
-          crosshair: true
-        },
-        yAxis: {
-          min: 0,
-          title: {
-            text: '成交次数'
-          }
-        },
-        tooltip: {
-          headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
-          pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
-            '<td style="padding:0"><b>{point.y} 次</b></td></tr>',
-          footerFormat: '</table>',
-          shared: true,
-          useHTML: true
-        },
-        plotOptions: {
-          column: {
-            pointPadding: 0.2,
-            borderWidth: 0
-          }
-        },
-        series: [{
-          name: '成交次数',
-          data: rentalCounts
-        }]
-      });
+          Highcharts.chart('vehicle-rental-chart', {
+            chart: {
+              type: 'column'
+            },
+            title: {
+              text: null
+            },
+            xAxis: {
+              categories: vehicleNames,
+              crosshair: true
+            },
+            yAxis: {
+              min: 0,
+              title: {
+                text: '成交次数'
+              }
+            },
+            tooltip: {
+              headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
+              pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
+                '<td style="padding:0"><b>{point.y} 次</b></td></tr>',
+              footerFormat: '</table>',
+              shared: true,
+              useHTML: true
+            },
+            plotOptions: {
+              column: {
+                pointPadding: 0.2,
+                borderWidth: 0
+              }
+            },
+            series: [{
+              name: '成交次数',
+              data: rentalCounts
+            }]
+          });
+        }
+      } catch (error) {
+        console.error('获取车辆租赁数据失败:', error);
+        // 如果Redis数据获取失败，使用默认数据
+        const vehicleNames = ['本田雅阁', '本田思域', '丰田凯美瑞', '大众帕萨特', '现代索纳塔'];
+        const rentalCounts = [20, 18, 22, 8, 6];
+        
+        Highcharts.chart('vehicle-rental-chart', {
+          chart: { type: 'column' },
+          title: { text: null },
+          xAxis: { categories: vehicleNames, crosshair: true },
+          yAxis: { min: 0, title: { text: '成交次数' } },
+          tooltip: {
+            headerFormat: '<span style="font-size:10px">{point.key}</span><table>',
+            pointFormat: '<tr><td style="color:{series.color};padding:0">{series.name}: </td>' +
+              '<td style="padding:0"><b>{point.y} 次</b></td></tr>',
+            footerFormat: '</table>',
+            shared: true,
+            useHTML: true
+          },
+          plotOptions: { column: { pointPadding: 0.2, borderWidth: 0 } },
+          series: [{ name: '成交次数', data: rentalCounts }]
+        });
+      }
     };
 
     // 在组件挂载后初始化图表

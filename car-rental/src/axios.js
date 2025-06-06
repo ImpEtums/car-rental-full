@@ -1,48 +1,33 @@
 // car-rental/src/axios.js
 import axios from 'axios';
-import router from './router'; // 【重要】确保导入 router 实例，用于页面跳转
+import router from './router';
 
+// 确认前端axios配置
 // --- 1. Flask 后端 Axios 实例 ---
+// Docker环境下使用相对路径，通过nginx代理访问
 const flaskApiService = axios.create({
-    baseURL: 'http://localhost:5000', // 你的 Flask 后端服务器地址
-    timeout: 10000,
-    withCredentials: true, // 允许携带 cookie，确保跨域请求时能发送 session cookie
+  baseURL: '/api',  // 修改这里：从 'http://localhost:5000/api' 改为 '/api'
+  timeout: 10000,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
-
-// Flask 后端请求拦截器 (如果 Flask 需要特定的请求头或处理，可以在这里添加)
-flaskApiService.interceptors.request.use(
-    (config) => {
-        // 例如，如果 Flask 也有自己的 Session ID 或 CSRF token 逻辑，可以在这里添加
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
-
-// Flask 后端响应拦截器 (用于处理 Flask 返回的错误或数据格式)
-flaskApiService.interceptors.response.use(
-    (response) => {
-        return response;
-    },
-    (error) => {
-        // 这里可以针对 Flask 后端返回的错误进行处理
-        console.error('Flask API 错误:', error.response || error);
-        return Promise.reject(error);
-    }
-);
 
 // --- 2. Node.js 后端 Axios 实例 ---
 const nodeApiService = axios.create({
-    baseURL: 'http://localhost:3000/api', // 你的 Node.js API 服务器地址
-    timeout: 5000, // Node.js 服务可以设置更短的超时
-    withCredentials: true, // 如果你的 Node.js CORS 配置允许 credentials
+    baseURL: '/node-api',
+    timeout: 5000,
+    withCredentials: true,
+    headers: {
+        'Content-Type': 'application/json'
+    }
 });
 
 // Node.js 后端请求拦截器：添加 JWT
 nodeApiService.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('token'); // 从 localStorage 获取存储的 JWT
+        const token = localStorage.getItem('token');
 
         // 检查请求的 URL 是否是登录或注册路径
         // config.url 是相对于 baseURL 的路径，例如 '/auth/login' 或 '/auth/register'
@@ -99,3 +84,6 @@ export {
     flaskApiService, // 导出用于 Flask 后端的实例
     nodeApiService   // 导出用于 Node.js 后端的实例
 };
+
+// 添加默认导出，通常导出Flask API服务
+export default flaskApiService;

@@ -2,7 +2,6 @@
   "name": "car-rental",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,11 +15,16 @@
     "@vuemap/vue-amap": "^2.1.8",
     "axios": "^1.7.9",
     "car-rental": "file:",
-    "element-plus": "^2.9.1",
+    "element-plus": "^2.9.11",
+    "express": "^5.1.0",
     "highcharts": "^12.2.0",
     "js-cookie": "^3.0.5",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "memcached": "^2.2.2",
+    "three": "^0.160.0",
+    "@types/three": "^0.160.0",
+    "vue": "^3.5.16",
+    "vue-router": "^4.5.0",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

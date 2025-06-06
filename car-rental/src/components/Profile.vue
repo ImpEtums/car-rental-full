@@ -28,11 +28,11 @@
           </div>
           <div class="form-group">
             <label>真实姓名</label>
-            <input type="text" v-model="user.real_name" class="form-input disabled" disabled />
+            <input type="text" v-model="user.real_name" class="form-input" required />
           </div>
           <div class="form-group">
             <label>身份证号码</label>
-            <input type="text" v-model="user.id_number" class="form-input disabled" disabled />
+            <input type="text" v-model="user.id_number" class="form-input" required />
           </div>
           <div class="form-group">
             <label>手机号码</label>
@@ -320,13 +320,20 @@ export default {
   },
   created() {
     this.fetchUserInfo();
-    // Initialize date dropdowns for each order
-    this.orders.forEach((order) => {
-      const date = new Date(order.order_time);
-      order.year = date.getFullYear();
-      order.month = date.getMonth() + 1;
-      order.day = date.getDate();
-    });
+    this.fetchUserOrders();
+  },
+  // 添加路由监听
+  watch: {
+    '$route'(to, from) {
+      // 当路由变化时重新获取数据
+      if (to.path === '/profile') {
+        this.fetchUserOrders();
+      }
+    }
+  },
+  // 或者使用activated生命周期（如果使用了keep-alive）
+  activated() {
+    this.fetchUserOrders();
   },
   methods: {
     formatDateTime(dateStr) {
@@ -356,33 +363,35 @@ export default {
       }
     },
     async fetchUserInfo() {
+      // 首先检查是否有token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.$router.push('/login');
+        return;
+      }
+      
       try {
-        // *** 关键修改：使用 nodeApiService 调用 Node.js 后端 API ***
-        const response = await nodeApiService.get('/auth/me'); // 调用你的个人中心 API
-
-        // 根据 Node.js 后端 /auth/me 接口的响应格式来处理
+        const response = await nodeApiService.get('/auth/me');
+        
         if (response.data && response.data.user) {
-          // 将 Node.js 后端返回的 camelCase 字段映射到 Vue 模板使用的 snake_case
           this.user.user_id = response.data.user.userId;
           this.user.username = response.data.user.username;
           this.user.email = response.data.user.email;
-          this.user.real_name = response.data.user.realName; // 映射
-          this.user.id_number = response.data.user.idNumber; // 映射
+          this.user.real_name = response.data.user.realName;
+          this.user.id_number = response.data.user.idNumber;
           this.user.phone = response.data.user.phone;
-          // this.user.register_time = response.data.user.createdAt; // 映射
-          this.user.register_time = response.data.user.registerTime; // 这里是修正！
+          this.user.register_time = response.data.user.registerTime;
         } else {
           console.error('获取用户信息失败: 响应数据格式不正确', response.data);
-          // 可以设置一个错误消息显示给用户
           this.error = '无法获取个人中心数据，请检查后端响应。';
         }
       } catch (error) {
         console.error('获取用户信息失败:', error);
-        // 如果是 401/403，nodeApiService 的响应拦截器应该已经处理并清除了 token
-        // 这里可以根据需要提示用户或重定向
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-          console.log('用户认证失败或过期，尝试重新登录...');
-          // this.$router.push('/login'); // 如果需要强制跳转
+          // 认证失败，清除token并跳转到登录页
+          localStorage.removeItem('token');
+          this.$router.push('/login');
+          return;
         }
         this.error = '获取个人中心数据失败。请检查网络或重新登录。';
       }
@@ -414,12 +423,24 @@ export default {
     },
     async logout() {
       try {
-        // 假设退出登录是由 Node.js 后端处理 JWT Token
-        // Node.js 后端的 logout 通常只需清除前端的 token，后端不需要做额外操作
-        // 如果后端有会话管理或黑名单机制，再考虑调用后端 API
-        localStorage.removeItem('jwt_token'); // 清除前端保存的 JWT
-        localStorage.removeItem('user_id'); // 清除其他可能保存的用户信息
-        localStorage.removeItem('username');
+        // 清除所有可能的token和用户信息
+        localStorage.removeItem('token'); // 主要的token
+        localStorage.removeItem('jwt_token'); // 聊天用的token
+        localStorage.removeItem('userId'); // 用户ID
+        localStorage.removeItem('username'); // 用户名
+        localStorage.removeItem('user_id'); // 其他可能的用户ID
+        
+        // 清空组件的用户数据
+        this.user = {
+          user_id: '',
+          username: '',
+          email: '',
+          real_name: '',
+          id_number: '',
+          phone: '',
+          register_time: ''
+        };
+        
         alert('您已成功退出登录。');
         this.$router.push('/login'); // 跳转到登录页面
       } catch (error) {
@@ -496,6 +517,48 @@ export default {
     },
     canDeleteOrder(order) {
       return order.status_description === '已完成' || order.status_description === '已取消';
+    },
+    // 添加获取订单数据的方法
+    async fetchUserOrders() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this.$router.push('/login');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/user_orders', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.status === 'success') {
+          this.orders = data.orders.map(order => {
+            const date = new Date(order.order_time);
+            return {
+              ...order,
+              year: date.getFullYear(),
+              month: date.getMonth() + 1,
+              day: date.getDate(),
+              image: new URL(`../assets/images/c1.png`, import.meta.url).href
+            };
+          });
+          console.log('订单数据已更新:', this.orders.length, '条订单');
+        } else {
+          console.error('获取订单失败:', data.message);
+          if (response.status === 401) {
+            localStorage.removeItem('token');
+            this.$router.push('/login');
+          }
+        }
+      } catch (error) {
+        console.error('获取订单数据失败:', error);
+      }
     },
   },
 };
@@ -906,5 +969,4 @@ export default {
   .date-inputs {
     flex-direction: column;
   }
-}
-</style>
+}</style>

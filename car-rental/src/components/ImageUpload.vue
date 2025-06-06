@@ -42,7 +42,7 @@
 
 <script setup>
 import { ref, defineEmits, defineProps } from 'vue'
-import axios from '../axios'
+import { flaskApiService } from '../axios' // 修改为命名导入
 
 const props = defineProps({
   carId: {

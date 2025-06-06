@@ -1,0 +1,183 @@
+# 移除version行，Docker Compose现在不需要指定版本
+services:
+  # MySQL数据库
+  mysql:
+    image: mysql:8.0.35
+    container_name: car-rental-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: car_rental
+      MYSQL_USER: car_user
+      MYSQL_PASSWORD: car_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./car_rent.sql:/docker-entrypoint-initdb.d/car_rent.sql
+    networks:
+      - car-rental-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Redis缓存
+  redis:
+    image: redis:7.2-alpine
+    container_name: car-rental-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - car-rental-network
+    command: redis-server --appendonly yes
+
+  # Memcached缓存
+  memcached:
+    image: memcached:1.6.22-alpine
+    container_name: car-rental-memcached
+    ports:
+      - "11211:11211"
+    networks:
+      - car-rental-network
+    command: memcached -m 64
+
+  # Elasticsearch搜索引擎
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: car-rental-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - car-rental-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MinIO对象存储
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: car-rental-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - car-rental-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Flask后端 - 恢复连接Docker服务
+  flask-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile-flask
+    container_name: car-rental-flask
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=mysql+pymysql://root:123456@mysql:3306/car_rental
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MEMCACHED_HOST=memcached:11211
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      memcached:
+        condition: service_started
+    networks:
+      - car-rental-network
+    volumes:
+      - ./uploads:/app/uploads
+
+  # Node.js后端 - 恢复连接Docker MySQL
+  node-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile-node
+    container_name: car-rental-node
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=car_rental
+      - JWT_SECRET=your_very_strong_and_random_jwt_secret_key_here
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - car-rental-network
+
+  # WebSocket服务器 - 恢复连接Docker Memcached
+  websocket-server:
+    build:
+      context: .
+      dockerfile: Dockerfile-websocket
+    container_name: car-rental-websocket
+    environment:
+      - PORT=3005
+      - MEMCACHED_HOST=memcached:11211
+    ports:
+      - "3005:3005"
+    depends_on:
+      - memcached
+    networks:
+      - car-rental-network
+
+  # Vue.js前端
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile-frontend
+    container_name: car-rental-frontend
+    environment:
+      - VUE_APP_FLASK_API_URL=http://flask-backend:5000
+      - VUE_APP_NODE_API_URL=http://node-backend:3000/api
+    ports:
+      - "80:80"
+    depends_on:
+      - flask-backend
+      - node-backend
+      - websocket-server
+    networks:
+      - car-rental-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+
+networks:
+  car-rental-network:
+    driver: bridge

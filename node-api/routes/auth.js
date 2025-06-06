@@ -310,4 +310,43 @@ router.put('/update_profile', authenticateToken, async (req, res) => {
     }
 });
 
+// --- 聊天室登录 API (POST /api/auth/chat-login) ---
+router.post('/chat-login', async (req, res) => {
+    const { nickname } = req.body;
+    logger.info('聊天室登录尝试，昵称: %s', nickname);
+
+    if (!nickname) {
+        logger.warn('聊天室登录尝试：缺少昵称。');
+        return res.status(400).json({ message: '昵称是必需的' });
+    }
+
+    try {
+        // 为聊天用户生成一个唯一ID
+        const userId = 'chat_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        
+        // 生成JWT令牌
+        const token = jwt.sign(
+            { userId: userId, nickname: nickname },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        logger.info('聊天用户 %s (ID: %s) 登录成功。令牌已颁发。', nickname, userId);
+        res.json({
+            message: '登录成功',
+            token: token,
+            userId: userId,
+            nickname: nickname
+        });
+
+    } catch (error) {
+        logger.error('聊天用户 %s 登录过程中发生错误：%s', nickname, error.stack);
+        res.status(500).json({
+            message: '服务器内部错误',
+            detailedError: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+
 module.exports = router;

@@ -70,73 +70,51 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { ref, onMounted } from 'vue';
+import { flaskApiService } from '@/axios';
 
-export default {
-  name: 'CityTreeView',
-  setup() {
-    const treeData = ref([]);
-    const loading = ref(true);
-    const error = ref(null);
-    const selectedProvince = ref(null);
-    const selectedCity = ref(null);
+const treeData = ref([]);
+const loading = ref(true);
+const error = ref(null);
+const selectedProvince = ref(null);
+const selectedCity = ref(null);
 
-    const selectProvince = (province) => {
-      if (selectedProvince.value === province) {
-        selectedProvince.value = null;
-        selectedCity.value = null;
-      } else {
-        selectedProvince.value = province;
-        selectedCity.value = null;
-      }
-    };
-
-    const selectCity = (city) => {
-      if (selectedCity.value === city) {
-        selectedCity.value = null;
-      } else {
-        selectedCity.value = city;
-      }
-    };
-
-    const fetchData = async () => {
-      try {
-        loading.value = true;
-        error.value = null;
-        const response = await fetch('http://localhost:5000/api/city-tree', {
-          credentials: 'include'
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch data');
-        }
-        
-        const data = await response.json();
-        treeData.value = data;
-      } catch (err) {
-        error.value = '数据加载失败，请稍后重试';
-        console.error('Error fetching city tree data:', err);
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    onMounted(() => {
-      fetchData();
-    });
-
-    return {
-      treeData,
-      loading,
-      error,
-      selectedProvince,
-      selectedCity,
-      selectProvince,
-      selectCity
-    };
+const selectProvince = (province) => {
+  if (selectedProvince.value === province) {
+    selectedProvince.value = null;
+    selectedCity.value = null;
+  } else {
+    selectedProvince.value = province;
+    selectedCity.value = null;
   }
 };
+
+const selectCity = (city) => {
+  if (selectedCity.value === city) {
+    selectedCity.value = null;
+  } else {
+    selectedCity.value = city;
+  }
+};
+
+const fetchData = async () => {
+  try {
+    loading.value = true;
+    error.value = null;
+    const response = await flaskApiService.get('/city-tree');
+    treeData.value = response.data;
+  } catch (err) {
+    error.value = '数据加载失败，请稍后重试';
+    console.error('Error fetching city tree data:', err);
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchData();
+});
 </script>
 
 <style scoped>

@@ -168,6 +168,7 @@
 
 <script>
 import { NDatePicker, NSelect, NTimePicker, NCheckbox, NModal } from 'naive-ui'
+import { flaskApiService } from '@/axios'
 
 export default {
   name: "CarRentalSelector",
@@ -263,66 +264,60 @@ export default {
       this.showModal = false
     },
 
-    fetchProvinces() {
-      fetch('http://localhost:5000/api/provinces')
-          .then(response => response.json())
-          .then(data => {
-            this.provinceOptions = data.provinces
-          })
-          .catch(error => {
-            console.error('获取省份数据失败:', error)
-          })
+    async fetchProvinces() {
+      try {
+        const response = await flaskApiService.get('/provinces');
+        this.provinceOptions = response.data.provinces;
+      } catch (error) {
+        console.error('获取省份数据失败:', error);
+      }
     },
-
+    
     fetchCities(provinceId) {
-      fetch(`http://localhost:5000/api/cities?province_id=${provinceId}`)
-          .then(response => response.json())
-          .then(data => {
-            this.cityOptions = data.cities
+      flaskApiService.get(`/cities?province_id=${provinceId}`)
+          .then(response => {
+            this.cityOptions = response.data.cities
           })
           .catch(error => {
             console.error('获取城市数据失败:', error)
           })
     },
-
+    
+    handleReturnProvinceChange(provinceValue) {
+      this.returnCity = null
+      this.returnDistrict = null
+      this.returnStation = null
+      flaskApiService.get(`/cities?province_id=${provinceValue}`)
+        .then(response => {
+          this.returnCityOptions = response.data.cities
+        })
+        .catch(error => {
+          console.error('获取返还城市数据失败:', error)
+        })
+    },
+    
+    handleReturnCityChange(cityValue) {
+      this.returnDistrict = null
+      this.returnStation = null
+      flaskApiService.get(`/countries?city_id=${cityValue}`)
+        .then(response => {
+          this.returnDistrictOptions = response.data.countries
+        })
+        .catch(error => {
+          console.error('获取返还区域数据失败:', error)
+        })
+    },
+    
     fetchCountries(cityId) {
-      fetch(`http://localhost:5000/api/countries?city_id=${cityId}`)
-          .then(response => response.json())
-          .then(data => {
-            this.districtOptions = data.countries
+      flaskApiService.get(`/countries?city_id=${cityId}`)
+          .then(response => {
+            this.districtOptions = response.data.countries
           })
           .catch(error => {
             console.error('获取区域数据失败:', error)
           })
     },
-
-    handleReturnProvinceChange(provinceValue) {
-      this.returnCity = null
-      this.returnDistrict = null
-      this.returnStation = null
-      fetch(`http://localhost:5000/api/cities?province_id=${provinceValue}`)
-        .then(response => response.json())
-        .then(data => {
-          this.returnCityOptions = data.cities
-        })
-        .catch(error => {
-          console.error('获取城市数据失败:', error)
-        })
-    },
-
-    handleReturnCityChange(cityValue) {
-      this.returnDistrict = null
-      this.returnStation = null
-      fetch(`http://localhost:5000/api/countries?city_id=${cityValue}`)
-        .then(response => response.json())
-        .then(data => {
-          this.returnDistrictOptions = data.countries
-        })
-        .catch(error => {
-          console.error('获取区域数据失败:', error)
-        })
-    },
-
+    
     isDateDisabled(timestamp) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -398,20 +393,26 @@ export default {
         return
       }
 
+      // 获取地点信息
       const provinceName = this.provinceOptions.find(p => p.value === this.selectedProvince)?.label
       const cityName = this.cityOptions.find(city => city.value === this.selectedCity)?.label
       const districtName = this.districtOptions.find(district => district.value === this.selectedDistrict)?.label
       const stationName = this.stationOptions.find(station => station.value === this.selectedStation)?.label
+      const pickupLocation = `${provinceName} ${cityName} ${districtName} ${stationName}`
 
-      let returnLocationInfo = ''
+      let returnLocation = pickupLocation // 默认同地还车
+      let returnStationId = this.selectedStation
+      
       if (this.isDifferentLocation) {
         const returnProvinceName = this.provinceOptions.find(p => p.value === this.returnProvince)?.label
         const returnCityName = this.returnCityOptions.find(city => city.value === this.returnCity)?.label
         const returnDistrictName = this.returnDistrictOptions.find(district => district.value === this.returnDistrict)?.label
         const returnStationName = this.stationOptions.find(station => station.value === this.returnStation)?.label
-        returnLocationInfo = `<br>还车位置: ${returnProvinceName} ${returnCityName} ${returnDistrictName} ${returnStationName}`
+        returnLocation = `${returnProvinceName} ${returnCityName} ${returnDistrictName} ${returnStationName}`
+        returnStationId = this.returnStation
       }
       
+      // 组合日期和时间
       const pickupDateTime = new Date(this.pickupDate)
       const pickupTime = new Date(this.pickupTime)
       pickupDateTime.setHours(pickupTime.getHours(), pickupTime.getMinutes())
@@ -420,14 +421,19 @@ export default {
       const returnTime = new Date(this.returnTime)
       returnDateTime.setHours(returnTime.getHours(), returnTime.getMinutes())
 
-      this.showModalMessage(
-        `租车信息:<br>` +
-        `取车位置: ${provinceName} ${cityName} ${districtName} ${stationName}` +
-        returnLocationInfo + '<br>' +
-        `取车时间: ${pickupDateTime.toLocaleString()}<br>` +
-        `还车时间: ${returnDateTime.toLocaleString()}<br>` +
-        `是否异地还车: ${this.isDifferentLocation ? '是' : '否'}`
-      )
+      // 跳转到车辆展示页面，传递所有租车参数
+      this.$router.push({
+        name: 'showcase',
+        query: {
+          pickupLocation: pickupLocation,
+          returnLocation: returnLocation,
+          pickupTime: pickupDateTime.getTime(), // 传递时间戳
+          returnTime: returnDateTime.getTime(), // 传递时间戳
+          pickupStationId: this.selectedStation,
+          returnStationId: returnStationId,
+          isDifferentLocation: this.isDifferentLocation
+        }
+      })
     }
   },
   watch: {

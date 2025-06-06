@@ -12,8 +12,10 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // 连接到Memcached服务器
-const memcached = new Memcached('127.0.0.1:11211');
-console.log('已连接到Memcached服务器');
+// 修改Memcached连接配置
+const memcachedHost = process.env.MEMCACHED_HOST || '127.0.0.1:11211';
+const memcached = new Memcached(memcachedHost);
+console.log(`已连接到Memcached服务器: ${memcachedHost}`);
 
 // 存储在线用户
 const onlineUsers = new Map();
@@ -169,7 +171,7 @@ app.get('/api/history', (req, res) => {
 });
 
 // 启动服务器
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
 server.listen(PORT, () => {
   console.log(`服务器运行在 http://localhost:${PORT}`);
 });

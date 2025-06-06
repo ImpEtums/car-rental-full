@@ -44,6 +44,7 @@
 -   **Elasticsearch 配置:**
     -   应用程序默认连接到 `http://localhost:9200` 的 Elasticsearch 服务。您可以在 <mcfile name="elasticsearch_utils.py" path="c:\Users\DefineNX\Desktop\car-rental-full\elasticsearch_utils.py"></mcfile> 文件中修改此配置。
     -   **修改 Elasticsearch 默认密码:** 如果您刚安装 Elasticsearch，默认的 `elastic` 用户可能有一个生成的密码或者初始没有设置密码。要设置或更改 `elastic` 用户的密码：
+        
         -   导航到您的 Elasticsearch 安装目录。
         -   运行密码重置工具。例如，在 Linux/macOS 上：
             ```bash
@@ -67,7 +68,7 @@
         3.  创建一个名为 `cars` 的 Elasticsearch 索引（如果它不存在）。
         4.  将示例车辆数据索引到 Elasticsearch。
         这是一次性设置。如果 `car_info` 表中已有数据，则将跳过此初始同步。
-
+    
 -   **启动 Flask 开发服务器:**
     ```bash
     python app.py
@@ -81,9 +82,9 @@
      ```bash
     cd node-api
     node app.js
-    ```
+     ```
     后端服务将在 `http://localhost:5000` 上可用。
-    
+  
 ### 3. 前端配置 (Vue.js)
 
 -   导航到前端目录：
@@ -218,34 +219,7 @@ Invoke-WebRequest -Uri "https://dl.min.io/server/minio/release/windows-amd64/min
 mkdir C:\minio-data
 
 # 启动 MinIO 服务器
-.\minio.exe server C:\minio-data --console-address ":9001"
-```
-
-#### Unix/Linux 系统
-```bash
-# 使用 wget 下载 MinIO
-wget https://dl.min.io/server/minio/release/linux-amd64/minio
-chmod +x minio
-
-# 创建数据目录
-mkdir ~/minio-data
-
-# 启动 MinIO 服务器
-./minio server ~/minio-data --console-address ":9001"
-```
-
-#### macOS 系统
-```bash
-# 使用 Homebrew 安装（推荐）
-brew install minio/stable/minio
-
-# 或使用 wget 下载
-wget https://dl.min.io/server/minio/release/darwin-amd64/minio
-chmod +x minio
-
-# 创建数据目录并启动
-mkdir ~/minio-data
-./minio server ~/minio-data --console-address ":9001"
+.\minio.exe server D:\minio-data --console-address ":9001"
 ```
 
 ### 2. MinIO 控制台访问

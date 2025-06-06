@@ -19,7 +19,7 @@ class ChatService {
     const wsUrl = `${wsProtocol}//${window.location.host}/`;
     
     // 开发环境下使用固定地址
-    this.websocket = new WebSocket('ws://localhost:3000');
+    this.websocket = new WebSocket('ws://localhost:3005');
     
     this.websocket.onopen = () => {
       console.log('WebSocket连接已建立');

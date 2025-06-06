@@ -3617,7 +3617,7 @@ CREATE TABLE `order_fee`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `order_info`;
 CREATE TABLE `order_info`  (
-  `order_id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NULL DEFAULT NULL,
   `car_id` int(11) NULL DEFAULT NULL,
   `pickup_store_id` int(11) NULL DEFAULT NULL,

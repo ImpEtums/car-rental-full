@@ -2,11 +2,14 @@ import json
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
+import jwt  # 添加JWT库
+from functools import wraps  # 添加装饰器支持
 
 import bcrypt
 from flask import Flask, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+import redis  # 导入Redis库
 
 # 导入MinIO工具模块
 from minio_service.minio_utils import (
@@ -27,18 +30,85 @@ app = Flask(__name__)
 # 设置 Flask session 密钥
 app.config['SECRET_KEY'] = 'your_secret_key'  # 请更换成更安全的密钥
 
-# 启用 CORS，允许来自指定来源的请求，并允许带上 cookies
-CORS(app, origins="http://localhost:5173", supports_credentials=True)  # 支持携带凭证
+# JWT 密钥（与 Node.js 后端保持一致）
+JWT_SECRET = 'your_very_strong_and_random_jwt_secret_key_here'
 
-# 配置数据库连接
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/car_rental'
+# 启用 CORS，允许来自指定来源的请求，并允许带上 cookies
+CORS(app, origins=["http://localhost:5173", "http://localhost"], supports_credentials=True)  # 支持携带凭证
+
+# 配置数据库连接 - 从环境变量获取或使用默认值
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL', 
+    'mysql+pymysql://root:123456@localhost/car_rental'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 禁用对象修改追踪
 
 # 初始化 SQLAlchemy
 db = SQLAlchemy(app)
 
+# 初始化Redis连接 - 从环境变量获取或使用默认值
+redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+if redis_url.startswith('redis://'):
+    # 解析redis://host:port/db格式
+    redis_parts = redis_url.replace('redis://', '').split('/')
+    redis_host_port = redis_parts[0].split(':')
+    redis_host = redis_host_port[0]
+    redis_port = int(redis_host_port[1]) if len(redis_host_port) > 1 else 6379
+    redis_db = int(redis_parts[1]) if len(redis_parts) > 1 else 0
+else:
+    redis_host = 'localhost'
+    redis_port = 6379
+    redis_db = 0
+
+redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
+
 # 导入 Elasticsearch 工具模块
-from elasticsearch_utils import search_cars as es_search_cars, create_index_if_not_exists, bulk_index_cars, format_car_data_for_db, generate_insert_sql
+try:
+    from elasticsearch_utils import search_cars as es_search_cars, create_index_if_not_exists, bulk_index_cars, format_car_data_for_db, generate_insert_sql
+except ImportError as e:
+    print(f"Warning: Elasticsearch utils import failed: {e}")
+    # 定义空函数作为fallback
+    def create_index_if_not_exists(*args, **kwargs):
+        print("Elasticsearch not available")
+        pass
+    def es_search_cars(*args, **kwargs):
+        return []
+    def bulk_index_cars(*args, **kwargs):
+        pass
+
+# JWT 认证装饰器
+def jwt_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 从请求头获取 token
+        auth_header = request.headers.get('Authorization')
+        token = None
+        
+        if auth_header:
+            try:
+                token = auth_header.split(' ')[1]  # Bearer <token>
+            except IndexError:
+                return jsonify({'message': '无效的认证头格式', 'status': 'error'}), 401
+        
+        if not token:
+            return jsonify({'message': '缺少认证 token', 'status': 'error'}), 401
+        
+        try:
+            # 验证 token
+            data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            current_user_id = data['userId']  # 修改：使用 'userId' 而不是 'id'
+            
+            # 将用户ID添加到请求上下文中
+            request.current_user_id = current_user_id
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token 已过期', 'status': 'error'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': '无效的 token', 'status': 'error'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 # 省份表模型
 class Province(db.Model):
@@ -60,7 +130,7 @@ class City(db.Model):
     city_id = db.Column(db.String(12))
     province_id = db.Column(db.String(12), db.ForeignKey('province_info.province_id'))
 
-    province = db.relationship('Province', backref= db.backref('cities', lazy=True))
+    province = db.relationship('Province', backref=db.backref('cities', lazy=True))
 
     def __repr__(self):
         return f'<City {self.name}>'
@@ -205,7 +275,8 @@ class CarTypeInfo(db.Model):
     type_id = db.Column(db.Integer, primary_key=True)
     type_name = db.Column(db.String(50), nullable=False)
     seat_num = db.Column(db.Integer)
-
+    daily_rent = db.Column(db.Numeric(10, 2))  # 日租金
+    deposit = db.Column(db.Numeric(10, 2))  # 押金
     price_per_day = db.Column(db.Numeric(10, 2)) # 使用 Numeric 对应 decimal
 
 # 数据库和服务初始化将在主程序启动时执行
@@ -231,6 +302,68 @@ def api_search_cars():
                 car['image_url'] = get_public_file_url(car['image_url'])
     
     return jsonify(results)
+
+# 新增MySQL搜索车辆的API
+@app.route('/search_cars', methods=['GET'])
+@webservice_support
+def search_cars_mysql():
+    """使用MySQL替代Elasticsearch的车辆搜索"""
+    query = request.args.get('q', '').strip()
+    
+    try:
+        if not query:
+            # 返回所有可用车辆
+            cars_query = db.session.query(CarInfo, CarTypeInfo).join(
+                CarTypeInfo, CarInfo.type_id == CarTypeInfo.type_id
+            ).filter(CarInfo.rental_status == 0)  # 只返回可租赁的车辆
+        else:
+            # 使用MySQL LIKE查询进行搜索
+            cars_query = db.session.query(CarInfo, CarTypeInfo).join(
+                CarTypeInfo, CarInfo.type_id == CarTypeInfo.type_id
+            ).filter(
+                db.and_(
+                    CarInfo.rental_status == 0,  # 只返回可租赁的车辆
+                    db.or_(
+                        CarInfo.brand.like(f'%{query}%'),
+                        CarInfo.model.like(f'%{query}%'),
+                        CarTypeInfo.type_name.like(f'%{query}%'),
+                        CarInfo.color.like(f'%{query}%')
+                    )
+                )
+            )
+        
+        cars = cars_query.all()
+        
+        # 格式化返回数据
+        result = []
+        for car_info, car_type in cars:
+            result.append({
+                'car_id': car_info.car_id,
+                'brand': car_info.brand,
+                'model': car_info.model,
+                'color': car_info.color,
+                'type_name': car_type.type_name,
+                'daily_rent': float(car_type.daily_rent),
+                'deposit': float(car_type.deposit),
+                'image': car_info.car_images or '/src/assets/images/c1.png',
+                'transmission_type': car_info.transmission_type,
+                'fuel_type': car_info.fuel_type,
+                'engine_capacity': car_info.engine_capacity
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'data': result,
+            'total': len(result)
+        })
+        
+    except Exception as e:
+        print(f"搜索车辆时出错: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': '搜索失败',
+            'data': []
+        }), 500
 
 
 # 新的WebService支持路由
@@ -323,8 +456,6 @@ def update_car_image():
         return jsonify({'error': f'Failed to update car image: {str(e)}'}), 500
 
 @app.route('/api/check_user', methods=['POST'])
-
-@app.route('/api/check_user', methods=['POST'])
 def check_user():
     data = request.json
     username = data.get('username')
@@ -352,7 +483,7 @@ def check_user():
 
 
 # 新的WebService支持路由
-@app.route('/api/register_user', methods=['POST'])
+@app.route('/api/auth/register_user', methods=['POST'])
 @webservice_support
 def register_user():
     data = request.json
@@ -439,78 +570,94 @@ def login_user():
 # 新的WebService支持路由
 @app.route('/api/get_user_info', methods=['GET'])
 @webservice_support
+@jwt_required  # 使用 JWT 认证
 def get_user_info():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"message": "未登录，用户ID为空", "status": "error"}), 401
-
-    user = UserInfo.query.filter_by(user_id=user_id).first()
-    if user:
-        return jsonify({
-            "status": "success",
-            "user": {
-                "user_id": user.user_id,
-                "username": user.username,
-                "email": user.email,
-                "real_name": user.real_name,
-                "id_type": user.id_type,
-                "id_number": user.id_number,
-                "phone": user.phone,
-                "register_time": user.register_time.strftime('%Y-%m-%d %H:%M:%S') if user.register_time else None
-            }
-        })
-    else:
-        return jsonify({"message": "用户不存在", "status": "error"}), 404
+    user_id = request.current_user_id  # 从 JWT token 中获取用户ID
+    
+    try:
+        user = UserInfo.query.filter_by(user_id=user_id).first()
+        if user:
+            return jsonify({
+                "status": "success",
+                "user_info": {
+                    "user_id": user.user_id,
+                    "username": user.username,
+                    "email": user.email,
+                    "phone": user.phone,
+                    "real_name": user.real_name,
+                    "id_number": user.id_number,
+                    "id_type": user.id_type,
+                    "register_time": user.register_time.strftime('%Y-%m-%d %H:%M:%S') if user.register_time else None
+                }
+            })
+        else:
+            return jsonify({"message": "用户不存在", "status": "error"}), 404
+    except Exception as e:
+        return jsonify({"message": f"获取用户信息失败: {str(e)}", "status": "error"}), 500
 
 
 # 新的WebService支持路由
-@app.route('/api/update_user_info', methods=['PUT'])
+@app.route('/api/update_user_info', methods=['PUT', 'POST'])  # 同时支持 PUT 和 POST
 @webservice_support
+@jwt_required  # 使用 JWT 认证
 def update_user_info():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"message": "未登录", "status": "error"}), 401
-
-    user = UserInfo.query.filter_by(user_id=user_id).first()
-    if not user:
-        return jsonify({"message": "用户不存在", "status": "error"}), 404
-
+    user_id = request.current_user_id  # 从 JWT token 中获取用户ID
+    
     data = request.get_json()
-
-    # 检查用户名是否被其他用户使用
-    if data.get('username') and data['username'] != user.username:
-        existing_user = UserInfo.query.filter_by(username=data['username']).first()
-        if existing_user and existing_user.user_id != user_id:
-            return jsonify({"message": "用户名已被使用", "status": "error"}), 400
-
-    # 检查邮箱是否被其他用户使用
-    if data.get('email') and data['email'] != user.email:
-        existing_user = UserInfo.query.filter_by(email=data['email']).first()
-        if existing_user and existing_user.user_id != user_id:
-            return jsonify({"message": "邮箱已被使用", "status": "error"}), 400
-
-    # 检查手机号是否被其他用户使用
-    if data.get('phone') and data['phone'] != user.phone:
-        existing_user = UserInfo.query.filter_by(phone=data['phone']).first()
-        if existing_user and existing_user.user_id != user_id:
-            return jsonify({"message": "手机号已被使用", "status": "error"}), 400
-
-    # 更新用户信息
-    user.username = data.get('username', user.username)
-    user.email = data.get('email', user.email)
-    user.phone = data.get('phone', user.phone)
-
+    
     try:
+        user = UserInfo.query.filter_by(user_id=user_id).first()
+        if not user:
+            return jsonify({"message": "用户不存在", "status": "error"}), 404
+        
+        # 检查用户名是否已存在（如果要更新用户名）
+        if 'username' in data and data['username'] != user.username:
+            existing_user = UserInfo.query.filter_by(username=data['username']).first()
+            if existing_user:
+                return jsonify({"message": "用户名已存在", "status": "error"}), 400
+        
+        # 检查邮箱是否已存在（如果要更新邮箱）
+        if 'email' in data and data['email'] != user.email:
+            existing_email = UserInfo.query.filter_by(email=data['email']).first()
+            if existing_email:
+                return jsonify({"message": "邮箱已被使用", "status": "error"}), 400
+        
+        # 检查手机号是否已存在（如果要更新手机号）
+        if 'phone' in data and data['phone'] != user.phone:
+            existing_phone = UserInfo.query.filter_by(phone=data['phone']).first()
+            if existing_phone:
+                return jsonify({"message": "手机号已被使用", "status": "error"}), 400
+        
+        # 检查身份证号是否已存在（如果要更新身份证号）
+        if 'id_number' in data and data['id_number'] != user.id_number:
+            existing_id = UserInfo.query.filter_by(id_number=data['id_number']).first()
+            if existing_id:
+                return jsonify({"message": "身份证号已被使用", "status": "error"}), 400
+        
+        # 更新用户信息
+        if 'username' in data:
+            user.username = data['username']
+        if 'email' in data:
+            user.email = data['email']
+        if 'phone' in data:
+            user.phone = data['phone']
+        if 'real_name' in data:
+            user.real_name = data['real_name']
+        if 'id_number' in data:
+            user.id_number = data['id_number']
+        
         db.session.commit()
+        
         return jsonify({
             "status": "success",
             "message": "用户信息更新成功"
         })
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({
             "status": "error",
-            "message": "更新失败：" + str(e)
+            "message": f"更新失败: {str(e)}"
         }), 500
 
 
@@ -528,11 +675,9 @@ def logout():
 # 省份接口
 @app.route('/api/provinces', methods=['GET'])
 def get_provinces():
-    provinces = Province.query.all()  # 获取所有省份
+    provinces = Province.query.all()
     province_list = [{"label": province.name, "value": province.province_id} for province in provinces]
-    response = jsonify({
-        "provinces": province_list
-    })
+    response = jsonify({"provinces": province_list})
     response.set_data(json.dumps(response.get_json(), ensure_ascii=False))
     return response
 
@@ -562,7 +707,7 @@ def get_countries():
 
     response = jsonify({"countries": country_list})
     response.set_data(json.dumps(response.get_json(), ensure_ascii=False))
-    return jsonify({"countries": country_list})
+    return response
 
 # 获取某城市所有门店
 @app.route('/api/stores', methods=['GET'])
@@ -649,33 +794,302 @@ def get_hot_cities():
             'message': str(e)
         }), 500
 
+# 在现有模型定义后添加订单相关模型
+class OrderInfo(db.Model):
+    __tablename__ = 'order_info'
+    
+    order_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_info.user_id'), nullable=False)
+    car_id = db.Column(db.Integer, nullable=False)
+    pickup_store_id = db.Column(db.Integer, nullable=False)
+    return_store_id = db.Column(db.Integer, nullable=False)
+    order_time = db.Column(db.DateTime, default=datetime.utcnow)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    actual_start_time = db.Column(db.DateTime, nullable=True)
+    actual_end_time = db.Column(db.DateTime, nullable=True)
+    rental_days = db.Column(db.Integer, nullable=False)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    deposit = db.Column(db.Numeric(10, 2), nullable=False)
+    coupon_id = db.Column(db.Integer, nullable=True)
+    discount_amount = db.Column(db.Numeric(10, 2), default=0.00)
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    status = db.Column(db.SmallInteger, default=0)  # 0-待支付/1-已支付/2-已取车/3-已还车/4-已取消
+    
+    # 关联用户表
+    user = db.relationship('UserInfo', backref=db.backref('orders', lazy=True))
+
+# 添加创建订单的API
+@app.route('/api/create_order', methods=['POST'])
+@webservice_support
+@jwt_required
+def create_order():
+    user_id = request.current_user_id
+    data = request.get_json()
+    
+    try:
+        # 手动生成订单ID（临时解决方案）
+        max_order = db.session.query(db.func.max(OrderInfo.order_id)).scalar()
+        next_order_id = (max_order or 0) + 1
+        
+        # 创建新订单
+        new_order = OrderInfo(
+            order_id=next_order_id,  # 手动设置订单ID
+            user_id=user_id,
+            car_id=data.get('car_id'),
+            pickup_store_id=data.get('pickup_store_id', 301),
+            return_store_id=data.get('return_store_id', 302),
+            start_time=datetime.fromisoformat(data.get('start_time').replace('Z', '+00:00')),
+            end_time=datetime.fromisoformat(data.get('end_time').replace('Z', '+00:00')),
+            rental_days=data.get('rental_days'),
+            total_amount=data.get('total_amount'),
+            deposit=data.get('deposit', 150.00),
+            coupon_id=data.get('coupon_id'),
+            discount_amount=data.get('discount_amount', 0.00),
+            status=1
+        )
+        
+        db.session.add(new_order)
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "订单创建成功",
+            "order_id": new_order.order_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "message": f"订单创建失败: {str(e)}"
+        }), 500
+
+# 添加获取用户订单的API
+@app.route('/api/user_orders', methods=['GET'])
+@webservice_support
+@jwt_required  # 添加JWT认证装饰器
+def get_user_orders():
+    user_id = request.current_user_id  # 从JWT token中获取用户ID
+    
+    try:
+        orders = OrderInfo.query.filter_by(user_id=user_id).order_by(OrderInfo.create_time.desc()).all()
+        
+        order_list = []
+        for order in orders:
+            # 状态映射
+            status_map = {
+                0: '待支付',
+                1: '已支付',
+                2: '已取车',
+                3: '已还车',
+                4: '已取消'
+            }
+            
+            order_data = {
+                'order_id': order.order_id,
+                'user_id': order.user_id,
+                'car_id': order.car_id,
+                'pickup_store_id': order.pickup_store_id,
+                'return_store_id': order.return_store_id,
+                'order_time': order.order_time.isoformat() if order.order_time else None,
+                'start_time': order.start_time.isoformat() if order.start_time else None,
+                'end_time': order.end_time.isoformat() if order.end_time else None,
+                'actual_start_time': order.actual_start_time.isoformat() if order.actual_start_time else None,
+                'actual_end_time': order.actual_end_time.isoformat() if order.actual_end_time else None,
+                'rental_days': order.rental_days,
+                'total_amount': float(order.total_amount),
+                'deposit': float(order.deposit),
+                'coupon_id': order.coupon_id,
+                'discount_amount': float(order.discount_amount),
+                'create_time': order.create_time.isoformat() if order.create_time else None,
+                'update_time': order.update_time.isoformat() if order.update_time else None,
+                'status': order.status,
+                'status_description': status_map.get(order.status, '未知状态'),
+                'name': f'订单 {order.order_id:03d}',
+                'image': '/assets/images/c1.png'
+            }
+            order_list.append(order_data)
+        
+        # 如果没有真实订单数据，添加一些静态示例订单（展示不同状态）
+        if not order_list:
+            sample_orders = [
+                {
+                    'order_id': 1,
+                    'car_id': 1,
+                    'pickup_store_id': 1,
+                    'return_store_id': 1,
+                    'start_time': '2024-01-15T10:00:00',
+                    'end_time': '2024-01-18T10:00:00',
+                    'total_amount': 900.00,
+                    'actual_amount': 900.00,
+                    'discount_amount': 0.00,
+                    'create_time': '2024-01-14T15:30:00',
+                    'update_time': '2024-01-14T15:30:00',
+                    'status': 0,
+                    'status_description': '待支付',
+                    'name': '订单 001',
+                    'image': '/assets/images/c1.png'
+                },
+                {
+                    'order_id': 2,
+                    'car_id': 2,
+                    'pickup_store_id': 1,
+                    'return_store_id': 2,
+                    'start_time': '2024-01-20T09:00:00',
+                    'end_time': '2024-01-22T18:00:00',
+                    'total_amount': 600.00,
+                    'actual_amount': 540.00,
+                    'discount_amount': 60.00,
+                    'create_time': '2024-01-19T14:20:00',
+                    'update_time': '2024-01-19T16:45:00',
+                    'status': 1,
+                    'status_description': '已支付',
+                    'name': '订单 002',
+                    'image': '/assets/images/c2.png'
+                },
+                {
+                    'order_id': 3,
+                    'car_id': 3,
+                    'pickup_store_id': 2,
+                    'return_store_id': 1,
+                    'start_time': '2024-01-10T08:00:00',
+                    'end_time': '2024-01-12T20:00:00',
+                    'total_amount': 750.00,
+                    'actual_amount': 750.00,
+                    'discount_amount': 0.00,
+                    'create_time': '2024-01-09T11:15:00',
+                    'update_time': '2024-01-12T20:30:00',
+                    'status': 2,
+                    'status_description': '已完成',
+                    'name': '订单 003',
+                    'image': '/assets/images/c3.png'
+                }
+            ]
+            order_list.extend(sample_orders)
+        
+        return jsonify({
+            "status": "success",
+            "orders": order_list
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"获取订单失败: {str(e)}"
+        }), 500
+
+# 获取城市网点数据的API端点
+@app.route('/api/redis/city-branches', methods=['GET'])
+def get_city_branches():
+    try:
+        # 从Redis获取城市网点数据
+        city_data = redis_client.hgetall('city_branches')
+        
+        # 如果Redis中没有数据，初始化默认数据
+        if not city_data:
+            default_data = {
+                '上海': '10',
+                '浙江': '15', 
+                '北京': '8',
+                '广州': '12',
+                '深圳': '9'
+            }
+            redis_client.hmset('city_branches', default_data)
+            city_data = default_data
+        
+        # 转换数据类型
+        result = {city: int(count) for city, count in city_data.items()}
+        
+        return jsonify({
+            'status': 'success',
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# 获取车辆租赁数据的API端点
+@app.route('/api/redis/vehicle-rentals', methods=['GET'])
+def get_vehicle_rentals():
+    try:
+        # 从Redis获取车辆租赁数据
+        rental_data = redis_client.hgetall('vehicle_rentals')
+        
+        # 如果Redis中没有数据，初始化默认数据
+        if not rental_data:
+            default_data = {
+                '本田雅阁': '20',
+                '本田思域': '18',
+                '丰田凯美瑞': '22',
+                '大众帕萨特': '8',
+                '现代索纳塔': '6'
+            }
+            redis_client.hmset('vehicle_rentals', default_data)
+            rental_data = default_data
+        
+        # 转换数据类型
+        result = {vehicle: int(count) for vehicle, count in rental_data.items()}
+        
+        return jsonify({
+            'status': 'success',
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        try:
+            # 创建数据库表
+            db.create_all()
+            print("Database tables created successfully.")
+        except Exception as e:
+            print(f"Error creating database tables: {e}")
         
-        # 初始化MinIO存储桶
-        print("Initializing MinIO...")
-        create_bucket_if_not_exists()
+        try:
+            # 初始化MinIO存储桶
+            print("Initializing MinIO...")
+            create_bucket_if_not_exists()
+            print("MinIO bucket check completed.")
+        except Exception as e:
+            print(f"Error with MinIO bucket: {e}")
         
-        # 迁移本地图片到MinIO（仅在首次运行时）
-        local_images_path = os.path.join('car-rental', 'src', 'assets', 'images')
-        if os.path.exists(local_images_path):
-            print("Migrating local images to MinIO...")
-            migration_map = migrate_local_images_to_minio(local_images_path)
-            print(f"Migrated {len(migration_map)} images to MinIO")
+        try:
+            # 迁移本地图片到MinIO（仅在首次运行时）
+            local_images_path = os.path.join('car-rental', 'src', 'assets', 'images')
+            if os.path.exists(local_images_path):
+                print("Migrating local images to MinIO...")
+                migration_map = migrate_local_images_to_minio(local_images_path)
+                print(f"Migrated {len(migration_map)} images to MinIO")
+        except Exception as e:
+            print(f"Error migrating images: {e}")
         
-        # 创建Elasticsearch索引
-        create_index_if_not_exists()
+        try:
+            # 创建Elasticsearch索引
+            create_index_if_not_exists()
+            print("Elasticsearch index check completed.")
+        except Exception as e:
+            print(f"Error with Elasticsearch: {e}")
         
-        # 在应用启动时执行一次数据同步
-        # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
-        # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
-        if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
-            print("Car_info table is empty. Attempting to sync data...")
-            print("Attempting to sync data from DB to ES during startup...")
-            sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
-        else:
-            print("Car_info table already contains data. Forcing sync for development.")
-            sync_cars_to_db_and_es()
+        try:
+            # 在应用启动时执行一次数据同步
+            # 注意：这仅为演示目的，实际生产环境中，数据同步策略会更复杂
+            # 例如，通过管理命令、定时任务或在数据发生变更时触发同步
+            if not CarInfo.query.first(): # 简单判断，如果car_info表为空，则执行同步
+                print("Car_info table is empty. Attempting to sync data...")
+                print("Attempting to sync data from DB to ES during startup...")
+                sync_cars_to_db_and_es() # 总是尝试在启动时同步，以确保ES最新
+            else:
+                print("Car_info table already contains data. Forcing sync for development.")
+                sync_cars_to_db_and_es()
+        except Exception as e:
+            print(f"Error syncing data: {e}")
     
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

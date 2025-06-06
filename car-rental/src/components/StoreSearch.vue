@@ -67,7 +67,8 @@
 import { ref, onMounted } from 'vue'
 import { NInput, NButton } from 'naive-ui'
 import AMapLoader from '@amap/amap-jsapi-loader'
-import axiosInstance from '@/axios'
+// 修改这一行：使用命名导入
+import { flaskApiService, nodeApiService } from '@/axios'
 
 const searchKeyword = ref('')
 const stores = ref([
